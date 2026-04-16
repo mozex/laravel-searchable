@@ -59,6 +59,18 @@ External relations are auto-detected when the related model's `$connection` diff
 
 Nested morph relations work: `'commentable:post.author.name'` resolves the morph to Post, then follows the `author` relation.
 
+## Case Sensitivity
+
+All search types use Laravel's `whereLike`, so matching is case-insensitive by default. `Post::search('LARAVEL')` matches `laravel`, `Laravel`, and `LARAVEL` with no extra flag.
+
+The actual behavior is database-driven:
+
+- **MySQL / MariaDB**: case-insensitive on `_ci` collations (default), case-sensitive on `_bin` / `_cs`.
+- **PostgreSQL**: always case-insensitive (`whereLike` compiles to `ILIKE`).
+- **SQLite**: case-insensitive for ASCII only.
+
+The package exposes no flag to flip this. To force case-sensitive matching, change the column's collation at the database level.
+
 ## Column Filtering Parameters
 
 Override or adjust columns per-query:

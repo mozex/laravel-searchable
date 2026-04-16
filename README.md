@@ -19,6 +19,7 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
   - [Relation Columns](#relation-columns)
   - [Morph Relations](#morph-relations)
   - [Cross-Database Relations](#cross-database-relations)
+- [Case Sensitivity](#case-sensitivity)
 - [Column Filtering](#column-filtering)
 - [Filament Integration](#filament-integration)
   - [Global Search](#global-search)
@@ -164,6 +165,18 @@ Nested relations inside morph targets work too. `commentable:post.author.name` f
 If a BelongsTo relation points to a model on a different database connection, the package picks this up on its own. Since cross-database JOINs aren't possible, it runs a separate query on the external connection, fetches matching IDs (capped at 50), and uses `whereIn` on the foreign key. Nothing to configure.
 
 Morph relations to external connections work the same way.
+
+## Case Sensitivity
+
+Searches are case-insensitive by default. `Comment::search('LARAVEL')` matches rows containing `laravel`, `Laravel`, or `LARAVEL` without any extra flag or argument.
+
+This comes from Laravel's `whereLike` helper, which the package uses for every search type (direct, relation, morph, and external). Actual behavior follows your database:
+
+- **MySQL / MariaDB**: case-insensitive on the usual `_ci` collations like `utf8mb4_unicode_ci` and `utf8mb4_0900_ai_ci`. A column on a `_bin` or `_cs` collation matches case-sensitively.
+- **PostgreSQL**: always case-insensitive. `whereLike` compiles to `ILIKE`.
+- **SQLite**: case-insensitive for ASCII only. `Café` and `café` won't match each other under the default `LIKE`.
+
+The package doesn't expose a flag to flip this. If you need case-sensitive matching on a normally case-insensitive column, change the column's collation at the database level.
 
 ## Column Filtering
 
