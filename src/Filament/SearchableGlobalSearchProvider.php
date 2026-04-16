@@ -48,7 +48,7 @@ class SearchableGlobalSearchProvider implements GlobalSearchProvider
     }
 
     /**
-     * @param  class-string<Resource>  $resource
+     * @param  class-string<resource>  $resource
      */
     protected function hasSearchableTrait(string $resource): bool
     {
@@ -59,7 +59,7 @@ class SearchableGlobalSearchProvider implements GlobalSearchProvider
     }
 
     /**
-     * @param  class-string<Resource>  $resource
+     * @param  class-string<resource>  $resource
      * @return Collection<int, GlobalSearchResult>
      */
     protected function getSearchableResults(string $resource, string $search): Collection
@@ -75,7 +75,7 @@ class SearchableGlobalSearchProvider implements GlobalSearchProvider
     }
 
     /**
-     * @param  class-string<Resource>  $resource
+     * @param  class-string<resource>  $resource
      * @param  Builder<Model>  $query
      * @return Collection<int, GlobalSearchResult>
      */
