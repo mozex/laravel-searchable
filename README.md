@@ -24,7 +24,7 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
   - [Global Search](#global-search)
 - [Handling Conflicts](#handling-conflicts)
   - [Laravel Scout](#laravel-scout)
-  - [Custom Builder Methods](#custom-builder-methods)
+  - [Existing `search` Methods](#existing-search-methods)
 
 ## Support This Project
 
@@ -241,7 +241,9 @@ class PostResource extends Resource
 }
 ```
 
-If `getGloballySearchableAttributes()` returns an empty array, the provider falls back to the model's full `searchableColumns()`. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
+You don't have to define `getGloballySearchableAttributes()` on every resource. When you skip it, Filament's default returns an empty array and the provider falls back to the model's full `searchableColumns()`. Define the method only when you want to scope global search to a specific subset.
+
+Resources whose models don't use the `Searchable` trait fall through to Filament's default global search behavior.
 
 ## Handling Conflicts
 
@@ -277,11 +279,14 @@ For the Filament macro, pass the renamed method:
 TextColumn::make('name')->advancedSearchable(method: 'databaseSearch')
 ```
 
-### Custom Builder Methods
+### Existing `search` Methods
 
-Some packages define their own `search()` method on a custom Eloquent Builder (Corcel is a common example). When that happens, `$query->search()` calls the Builder's method instead of this package's scope.
+Sometimes you can't reach this package's scope through `$query->search()` because something else already owns that name. Two common cases:
 
-For these cases, use `applySearch()` to call the scope directly:
+- **A custom Eloquent Builder defines its own `search()`** (Corcel's `PostBuilder` is the textbook example). `$query->search()` calls the Builder's method, not this package's scope.
+- **A parent model you extend already declares `scopeSearch`** with a different signature. Adding our trait causes a fatal error because PHP enforces method signature compatibility between trait methods and inherited methods.
+
+For both cases, use `applySearch()` to invoke the scope directly without going through the `search` name:
 
 ```php
 $query = Product::query();
@@ -296,7 +301,20 @@ $query->getModel()->applySearch($query, 'term', in: ['title', 'body']);
 $query->getModel()->applySearch($query, 'term', except: ['author.name']);
 ```
 
-You can also override the conflicting method in a custom Builder to delegate to `applySearch`, so the rest of your codebase still calls `$query->search()`:
+If a parent model's `scopeSearch` signature conflicts with this package's, alias our scope to a different name when adding the trait (the same pattern as the Scout case above):
+
+```php
+use Mozex\Searchable\Searchable as DatabaseSearchable;
+
+class Product extends VendorModel
+{
+    use DatabaseSearchable {
+        scopeSearch as scopeDatabaseSearch;
+    }
+}
+```
+
+For the Builder case specifically, you can also override the Builder's `search()` to delegate back to `applySearch`, so the rest of your codebase keeps calling `$query->search()`:
 
 ```php
 class ProductBuilder extends \Corcel\Model\Builder\PostBuilder
