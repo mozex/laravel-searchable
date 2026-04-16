@@ -25,9 +25,11 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
 
 ## Support This Project
 
-If you find this package useful in your projects, please consider supporting its development. Your support helps maintain and improve this package, along with [other open-source PHP packages](https://mozex.dev/docs).
+I maintain this package along with [several other open-source PHP packages](https://mozex.dev/docs) used by thousands of developers every day.
 
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=flat-square&logo=github)](https://github.com/sponsors/mozex)
+If my packages save you time or help your business, consider [**sponsoring my work on GitHub Sponsors**](https://github.com/sponsors/mozex). Your support lets me keep these packages updated, respond to issues quickly, and ship new features.
+
+Business sponsors get logo placement in package READMEs. [**See sponsorship tiers →**](https://github.com/sponsors/mozex)
 
 ## Installation
 
