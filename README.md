@@ -207,9 +207,7 @@ TextColumn::make('title')
 
 ### Global Search
 
-Global search needs both pieces wired up: the provider on your panel AND `getGloballySearchableAttributes()` on each resource. They work together, not as alternatives.
-
-**Step 1: Register the provider on your panel.** This replaces Filament's default global search so the provider can run the model's search scope across all your trait-using resources.
+Register the provider on your panel:
 
 ```php
 use Mozex\Searchable\Filament\SearchableGlobalSearchProvider;
@@ -220,14 +218,12 @@ return $panel
     ->globalSearch(SearchableGlobalSearchProvider::class);
 ```
 
-**Step 2: Declare which columns each resource should search.** The provider passes whatever you return from `getGloballySearchableAttributes()` as the `in:` filter to the search scope. Return all of the model's columns to search everything, or a subset to scope global search to specific columns:
+Then on each resource, define `getGloballySearchableAttributes()` to control which columns global search uses for that resource. Return all of the model's columns, or a subset:
 
 ```php
-use Filament\Resources\Resource;
-
 class CourseResource extends Resource
 {
-    // Use all columns the model declared as searchable
+    // Use everything the model declared as searchable
     public static function getGloballySearchableAttributes(): array
     {
         return new Course()->searchableColumns();
@@ -236,7 +232,7 @@ class CourseResource extends Resource
 
 class PostResource extends Resource
 {
-    // Or limit global search to a specific subset, even though
+    // Or limit global search to a subset, even though
     // the Post model has more columns in searchableColumns()
     public static function getGloballySearchableAttributes(): array
     {
@@ -245,7 +241,7 @@ class PostResource extends Resource
 }
 ```
 
-If a resource doesn't override `getGloballySearchableAttributes()`, the provider falls back to the model's full `searchableColumns()`. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
+If a resource doesn't override the method (or returns an empty array), the provider falls back to the model's full `searchableColumns()`. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
 
 ## Handling Conflicts
 
