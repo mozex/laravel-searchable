@@ -9,7 +9,6 @@ use Filament\Facades\Filament;
 use Filament\GlobalSearch\GlobalSearchResult;
 use Filament\GlobalSearch\GlobalSearchResults;
 use Filament\GlobalSearch\Providers\Contracts\GlobalSearchProvider;
-use Filament\Resources\Resource;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -48,7 +47,7 @@ class SearchableGlobalSearchProvider implements GlobalSearchProvider
     }
 
     /**
-     * @param  class-string<resource>  $resource
+     * @param  class-string<\Filament\Resources\Resource>  $resource
      */
     protected function hasSearchableTrait(string $resource): bool
     {
@@ -59,7 +58,7 @@ class SearchableGlobalSearchProvider implements GlobalSearchProvider
     }
 
     /**
-     * @param  class-string<resource>  $resource
+     * @param  class-string<\Filament\Resources\Resource>  $resource
      * @return Collection<int, GlobalSearchResult>
      */
     protected function getSearchableResults(string $resource, string $search): Collection
@@ -75,7 +74,7 @@ class SearchableGlobalSearchProvider implements GlobalSearchProvider
     }
 
     /**
-     * @param  class-string<resource>  $resource
+     * @param  class-string<\Filament\Resources\Resource>  $resource
      * @param  Builder<Model>  $query
      * @return Collection<int, GlobalSearchResult>
      */
