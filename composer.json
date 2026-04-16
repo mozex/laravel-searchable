@@ -24,26 +24,26 @@
     ],
     "require": {
         "php": "^8.2.0",
-        "illuminate/contracts": "^11.0||^12.0||^13.0",
-        "illuminate/database": "^11.0||^12.0||^13.0",
-        "illuminate/support": "^11.0||^12.0||^13.0",
+        "illuminate/contracts": "^11.0|^12.0|^13.0",
+        "illuminate/database": "^11.0|^12.0|^13.0",
+        "illuminate/support": "^11.0|^12.0|^13.0",
         "spatie/laravel-package-tools": "^1.16"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.14",
         "nunomaduro/collision": "^8.8",
-        "orchestra/testbench": "^9.0||^10.0||^11.0",
-        "pestphp/pest": "^3.0||^4.0",
-        "pestphp/pest-plugin-arch": "^3.0||^4.0",
-        "pestphp/pest-plugin-laravel": "^3.0||^4.0",
-        "pestphp/pest-plugin-type-coverage": "^3.0||^4.0",
+        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0",
+        "pestphp/pest-plugin-arch": "^3.0|^4.0",
+        "pestphp/pest-plugin-laravel": "^3.0|^4.0",
+        "pestphp/pest-plugin-type-coverage": "^3.0|^4.0",
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan-deprecation-rules": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0"
     },
     "suggest": {
-        "filament/filament": "Required for the advancedSearchable table column macro and global search provider (^4.0||^5.0)"
+        "filament/filament": "Required for the advancedSearchable table column macro and global search provider (^4.0|^5.0)"
     },
     "autoload": {
         "psr-4": {
