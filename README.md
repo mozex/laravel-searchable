@@ -171,16 +171,16 @@ You can override or adjust which columns are searched per-query:
 
 ```php
 // Search only specific columns (ignores searchableColumns)
-Post::query()->search('term', in: ['title', 'body'])->get();
+Post::search('term', in: ['title', 'body'])->get();
 
 // Add extra columns on top of searchableColumns
-Post::query()->search('term', include: ['slug'])->get();
+Post::search('term', include: ['slug'])->get();
 
 // Exclude specific columns from searchableColumns
-Post::query()->search('term', except: ['author.name'])->get();
+Post::search('term', except: ['author.name'])->get();
 
 // Combine them
-Post::query()->search('term', include: ['slug'], except: ['body'])->get();
+Post::search('term', include: ['slug'], except: ['body'])->get();
 ```
 
 All three parameters accept a string or an array.
@@ -247,7 +247,7 @@ If a resource doesn't override the method (or returns an empty array), the provi
 
 ### Laravel Scout
 
-Scout adds a static `search()` method on the model class (`Post::search('term')`). This package adds a query scope (`Post::query()->search('term')`). Technically, different call paths, so they don't collide.
+Scout and this package both expose a `search()` method on your model. Scout's is a static method that hits its search engine; this package's is a query scope that runs SQL. Technically, different call paths, so they don't collide.
 
 In practice, having two `search` entry points on the same model gets confusing fast. The cleaner approach is to alias this package's scope to a different name using PHP's trait aliasing, so each search path has its own clear name:
 
@@ -269,7 +269,7 @@ class Lesson extends Model
 }
 ```
 
-Now `Lesson::search('term')` runs Scout's full-text search, and `Lesson::query()->databaseSearch('term')` runs this package's database search. No ambiguity.
+Now `Lesson::search('term')` runs Scout's full-text search, and `Lesson::databaseSearch('term')` runs this package's database search. No ambiguity.
 
 For the Filament macro, pass the renamed method:
 
