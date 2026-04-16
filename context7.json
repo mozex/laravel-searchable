@@ -1,0 +1,8 @@
+{
+    "$schema": "https://context7.com/schema/context7.json",
+    "url": "https://context7.com/mozex/laravel-searchable",
+    "public_key": "pk_2dXAZIEpHP6qQeGGTuyQt",
+    "projectTitle": "Laravel Searchable",
+    "description": "Advanced multi-column, relation, and morph search for Laravel Eloquent models",
+    "folders": []
+}
