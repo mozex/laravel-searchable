@@ -46,18 +46,24 @@ That's it. No config files to publish, no migrations to run.
 
 ## Basic Usage
 
-Add the `Searchable` trait to your model and define which columns should be searchable:
+Add the `Searchable` trait to your model and define which columns should be searchable. You can mix direct columns, relation columns, and morph relations in the same array:
 
 ```php
 use Mozex\Searchable\Searchable;
 
-class Post extends Model
+class Comment extends Model
 {
     use Searchable;
 
     public function searchableColumns(): array
     {
-        return ['title', 'body', 'author.name', 'category.name'];
+        return [
+            'body',                          // direct column
+            'author.name',                   // BelongsTo relation
+            'tags.name',                     // HasMany relation
+            'commentable:post.title',        // morph relation
+            'commentable:video.name',        // another morph type
+        ];
     }
 
     public function author(): BelongsTo
@@ -65,21 +71,21 @@ class Post extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function category(): BelongsTo
+    public function commentable(): MorphTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->morphTo();
     }
 }
 ```
 
-Then search in any query:
+Then search:
 
 ```php
-// Search across all configured columns
-Post::query()->search('laravel')->get();
+// Shortest form, searches all configured columns
+Comment::search('laravel')->get();
 
 // Chain with other query constraints
-Post::query()
+Comment::query()
     ->where('published', true)
     ->search($request->input('q'))
     ->paginate();
@@ -201,7 +207,9 @@ TextColumn::make('title')
 
 ### Global Search
 
-For Filament's global search, register the provider in your panel:
+There are two ways to wire up global search.
+
+**Option 1: Register the provider on your panel.** This replaces Filament's default global search across all resources. Any resource whose model uses the `Searchable` trait gets searched through `searchableColumns()`. Resources without the trait fall back to Filament's default behavior.
 
 ```php
 use Mozex\Searchable\Filament\SearchableGlobalSearchProvider;
@@ -212,13 +220,55 @@ return $panel
     ->globalSearch(SearchableGlobalSearchProvider::class);
 ```
 
-Any resource whose model uses the `Searchable` trait gets searched through `searchableColumns()`. Resources without the trait fall back to Filament's default global search.
+**Option 2: Reuse `searchableColumns()` on individual resources.** If you want to keep Filament's default global search but avoid duplicating column lists, return the model's columns from `getGloballySearchableAttributes()`:
+
+```php
+use Filament\Resources\Resource;
+
+class CourseResource extends Resource
+{
+    public static function getGloballySearchableAttributes(): array
+    {
+        return new Course()->searchableColumns();
+    }
+}
+```
+
+This works without registering the provider. Filament's default global search will use the columns you defined on the model.
 
 ## Handling Conflicts
 
 ### Laravel Scout
 
-Scout adds a static `search()` method on the model class (`Post::search('term')`). This package adds a query scope (`Post::query()->search('term')`). Different call paths, so they don't collide. You can use both traits on the same model without issues.
+Scout adds a static `search()` method on the model class (`Post::search('term')`). This package adds a query scope (`Post::query()->search('term')`). Technically, different call paths, so they don't collide.
+
+In practice, having two `search` entry points on the same model gets confusing fast. The cleaner approach is to alias this package's scope to a different name using PHP's trait aliasing, so each search path has its own clear name:
+
+```php
+use Laravel\Scout\Searchable;
+use Mozex\Searchable\Searchable as DatabaseSearchable;
+
+class Lesson extends Model
+{
+    use DatabaseSearchable {
+        scopeSearch as scopeDatabaseSearch;
+    }
+    use Searchable;
+
+    public function searchableColumns(): array
+    {
+        return ['name', 'description'];
+    }
+}
+```
+
+Now `Lesson::search('term')` runs Scout's full-text search, and `Lesson::query()->databaseSearch('term')` runs this package's database search. No ambiguity.
+
+For the Filament macro, pass the renamed method:
+
+```php
+TextColumn::make('name')->advancedSearchable(method: 'databaseSearch')
+```
 
 ### Custom Builder Methods
 
