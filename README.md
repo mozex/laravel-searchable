@@ -312,15 +312,6 @@ class ProductBuilder extends \Corcel\Model\Builder\PostBuilder
 }
 ```
 
-For Filament's `advancedSearchable` macro, pass the `method` parameter to use a different scope name:
-
-```php
-TextColumn::make('title')
-    ->advancedSearchable(method: 'databaseSearch')
-```
-
-The global search provider uses `applySearch` internally, so it works with any model regardless of Builder conflicts.
-
 ## Resources
 
 Visit the [documentation site](https://mozex.dev/docs/laravel-searchable/v1) for searchable docs auto-updated from this repository.
