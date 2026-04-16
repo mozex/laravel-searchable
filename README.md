@@ -21,7 +21,9 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
   - [Cross-Database Relations](#cross-database-relations)
 - [Column Filtering](#column-filtering)
 - [Filament Integration](#filament-integration)
-- [Working with Laravel Scout](#working-with-laravel-scout)
+- [Handling Conflicts](#handling-conflicts)
+  - [Laravel Scout](#laravel-scout)
+  - [Custom Builder Methods](#custom-builder-methods)
 
 ## Support This Project
 
@@ -211,16 +213,55 @@ return $panel
 
 Any resource whose model uses the `Searchable` trait gets searched through `searchableColumns()`. Resources without the trait fall back to Filament's default global search.
 
-## Working with Laravel Scout
+## Handling Conflicts
 
-Scout adds a static `search()` method on the model class (`Post::search('term')`). This package adds a query scope (`Post::query()->search('term')`). Different call paths, so they don't collide.
+### Laravel Scout
 
-If you need a different scope name, the Filament macro supports a `method` parameter:
+Scout adds a static `search()` method on the model class (`Post::search('term')`). This package adds a query scope (`Post::query()->search('term')`). Different call paths, so they don't collide. You can use both traits on the same model without issues.
+
+### Custom Builder Methods
+
+Some packages define their own `search()` method on a custom Eloquent Builder (Corcel is a common example). When that happens, `$query->search()` calls the Builder's method instead of this package's scope.
+
+For these cases, use `applySearch()` to call the scope directly:
+
+```php
+$query = Product::query();
+$query->getModel()->applySearch($query, 'term');
+$results = $query->get();
+```
+
+`applySearch` accepts the same parameters as the scope:
+
+```php
+$query->getModel()->applySearch($query, 'term', in: ['title', 'body']);
+$query->getModel()->applySearch($query, 'term', except: ['author.name']);
+```
+
+You can also override the conflicting method in a custom Builder to delegate to `applySearch`, so the rest of your codebase still calls `$query->search()`:
+
+```php
+class ProductBuilder extends \Corcel\Model\Builder\PostBuilder
+{
+    public function search($term = false, ...$args): self
+    {
+        $query = Product::query();
+
+        new Product()->applySearch($query, $term, ...$args);
+
+        return $query;
+    }
+}
+```
+
+For Filament's `advancedSearchable` macro, pass the `method` parameter to use a different scope name:
 
 ```php
 TextColumn::make('title')
     ->advancedSearchable(method: 'databaseSearch')
 ```
+
+The global search provider uses `applySearch` internally, so it works with any model regardless of Builder conflicts.
 
 ## Resources
 
