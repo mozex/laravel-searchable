@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/packagist/l/mozex/laravel-searchable?style=flat-square)](https://packagist.org/packages/mozex/laravel-searchable)
 [![Total Downloads](https://img.shields.io/packagist/dt/mozex/laravel-searchable.svg?style=flat-square)](https://packagist.org/packages/mozex/laravel-searchable)
 
-Add a `Searchable` trait to any Eloquent model and search across multiple columns, relations, polymorphic relations, and cross-database relations with a single `->search()` call. It coexists with Laravel Scout (different call paths, no collisions) and ships with optional Filament integration for table search and global search.
+Add a `Searchable` trait to any Eloquent model and search across multiple columns, regular relations, polymorphic relations, and even cross-database relations with a single `->search()` call. Works alongside Laravel Scout. Ships with optional Filament integration for table search and global search.
 
 > **[Read the full documentation at mozex.dev](https://mozex.dev/docs/laravel-searchable/v1)**: searchable docs, version requirements, detailed changelog, and more.
 
@@ -241,7 +241,7 @@ class PostResource extends Resource
 }
 ```
 
-If a resource doesn't override the method (or returns an empty array), the provider falls back to the model's full `searchableColumns()`. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
+If `getGloballySearchableAttributes()` returns an empty array, the provider falls back to the model's full `searchableColumns()`. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
 
 ## Handling Conflicts
 
