@@ -43,10 +43,10 @@ External searches use `whereIn` with a subquery (capped at 50 results) because c
 ### Key design decisions
 
 - **No mutable state on the model.** Query builder and search text are passed as parameters through every method, not stored as instance properties. This makes the trait safe for concurrent use.
-- **No `searchProxy` workaround.** The scope works directly through the query builder (`$query->search(...)`) without needing a bridge method.
+- **`applySearch` for Builder conflicts.** When a model's Builder already has a `search()` method (e.g., Corcel's PostBuilder), `$query->search()` calls the Builder's method instead of the scope. The trait exposes `applySearch($query, $term, ...)` as a direct invocation that bypasses the Builder. The global search provider always uses `applySearch` to be safe.
 - **Connection comparison resolves null.** When comparing database connections, `null` (meaning "default") is resolved to the actual default connection name. This prevents false positives when one model sets the connection explicitly and another relies on the default.
 - **Only BelongsTo is detected as external.** HasMany/HasOne relations on different connections fall through to regular relation search, because cross-database `whereHas` would fail at the SQL level with a clear error rather than silently producing wrong results.
-- **Filament is optional.** The service provider checks `class_exists()` before registering macros. Filament files are excluded from PHPStan analysis since Filament isn't a dev dependency.
+- **Filament is a dev dependency.** The service provider checks `class_exists()` at runtime before registering macros (so end users without Filament aren't affected). Filament is in `require-dev` so PHPStan can analyze the `src/Filament/` directory and tests can exercise the macro.
 
 ## Testing
 
@@ -54,7 +54,7 @@ External searches use `whereIn` with a subquery (capped at 50 results) because c
 - **Test models**: `workbench/app/Models/` (Author, Post, Comment on default connection; Category on `external` connection)
 - **Morph map**: Configured in `TestCase::setUp()` with aliases `post` and `category`
 - **Two SQLite connections**: `testing` (default) and `external` (separate in-memory database)
-- **23 tests** covering all five search types, column resolution (`in`/`include`/`except`), empty search handling, and query integration
+- **29 tests** covering all five search types, column resolution (`in`/`include`/`except`), empty search handling, query integration, `applySearch` for Builder conflicts, and Filament macro registration
 
 ## Adding features
 

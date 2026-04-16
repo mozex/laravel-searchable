@@ -103,6 +103,40 @@ Auto-uses `searchableColumns()` for resources whose model has the `Searchable` t
 
 No conflicts. Scout adds a static `Post::search()` method; this package adds a query scope `Post::query()->search()`. They're different call paths.
 
+## Builder Method Conflicts
+
+Some packages define their own `search()` method on a custom Eloquent Builder (Corcel is a common example). When that happens, `$query->search()` calls the Builder's method instead of the scope.
+
+For these cases, use `applySearch()` to invoke the scope directly:
+
+```php
+$query = Product::query();
+$query->getModel()->applySearch($query, 'term', in: ['title']);
+$results = $query->get();
+```
+
+You can also override the conflicting method in a custom Builder to delegate back to `applySearch`, so the rest of the codebase still calls `$query->search()`:
+
+```php
+class ProductBuilder extends \Corcel\Model\Builder\PostBuilder
+{
+    public function search($term = false, ...$args): self
+    {
+        $query = Product::query();
+        new Product()->applySearch($query, $term, ...$args);
+        return $query;
+    }
+}
+```
+
+For Filament's `advancedSearchable` macro, pass `method:` to use a different scope name:
+
+```php
+TextColumn::make('title')->advancedSearchable(method: 'databaseSearch')
+```
+
+The global search provider uses `applySearch` internally, so it works regardless of Builder conflicts.
+
 ## Common Patterns
 
 ### Dynamic column composition from related models

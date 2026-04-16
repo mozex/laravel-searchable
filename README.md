@@ -21,6 +21,7 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
   - [Cross-Database Relations](#cross-database-relations)
 - [Column Filtering](#column-filtering)
 - [Filament Integration](#filament-integration)
+  - [Global Search](#global-search)
 - [Handling Conflicts](#handling-conflicts)
   - [Laravel Scout](#laravel-scout)
   - [Custom Builder Methods](#custom-builder-methods)
