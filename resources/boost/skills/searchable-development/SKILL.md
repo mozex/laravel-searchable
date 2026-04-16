@@ -1,37 +1,46 @@
 ---
 name: searchable-development
-description: Add multi-column database search to Eloquent models using mozex/laravel-searchable. Activate when the user mentions Searchable trait, searchableColumns, advancedSearchable, SearchableGlobalSearchProvider, multi-column search, relation search, morph search, cross-database search, or uses ->search() on Eloquent queries. Also activate when adding search to a model, configuring Filament table search, or setting up Filament global search with this package. Covers column notation (direct, relation, morph, external), column filtering (in/include/except), and Laravel Scout coexistence.
+description: Add multi-column database search to Eloquent models using mozex/laravel-searchable. Activate when the user mentions Searchable trait, searchableColumns, advancedSearchable, SearchableGlobalSearchProvider, applySearch, multi-column search, relation search, morph search, cross-database search, or uses ->search() on Eloquent queries. Also activate when adding search to a model, configuring Filament table search, or setting up Filament global search with this package. Covers column notation (direct, relation, morph, external), column filtering (in/include/except), Laravel Scout coexistence, and resolving conflicts when another package owns the search method name.
 ---
 
 # Searchable Development
 
 ## When to use this skill
 
-Activate when the user works with `mozex/laravel-searchable`, the `Searchable` trait, `searchableColumns()`, `->search()` scope, `advancedSearchable()` Filament macro, or `SearchableGlobalSearchProvider`. Also activate when adding search to an Eloquent model that uses this package.
+Activate when the user works with `mozex/laravel-searchable`, the `Searchable` trait, `searchableColumns()`, `->search()` scope, `applySearch()`, `advancedSearchable()` Filament macro, or `SearchableGlobalSearchProvider`. Also activate when adding search to an Eloquent model that uses this package.
 
 ## The Searchable Trait
 
-Add `Mozex\Searchable\Searchable` to any Eloquent model and define `searchableColumns()`:
+Add `Mozex\Searchable\Searchable` to any Eloquent model and define `searchableColumns()`. You can mix direct columns, relation columns, and morph relations in the same array:
 
 ```php
 use Mozex\Searchable\Searchable;
 
-class Post extends Model
+class Comment extends Model
 {
     use Searchable;
 
     public function searchableColumns(): array
     {
-        return ['title', 'body', 'author.name', 'category.name'];
+        return [
+            'body',
+            'author.name',
+            'tags.name',
+            'commentable:post.title',
+            'commentable:video.name',
+        ];
     }
 }
 ```
 
-Call `->search()` on any query builder:
+Then search:
 
 ```php
-Post::query()->search('term')->get();
-Post::query()->where('published', true)->search($query)->paginate();
+// Shortest form
+Comment::search('term')->get();
+
+// Chain with other constraints
+Comment::query()->where('published', true)->search('term')->paginate();
 ```
 
 ## Column Notation
@@ -56,16 +65,16 @@ Override or adjust columns per-query:
 
 ```php
 // Only search these columns (ignores searchableColumns)
-->search('term', in: ['title', 'body'])
+Post::search('term', in: ['title', 'body'])->get();
 
 // Add columns to searchableColumns
-->search('term', include: ['slug'])
+Post::search('term', include: ['slug'])->get();
 
 // Remove columns from searchableColumns
-->search('term', except: ['author.name'])
+Post::search('term', except: ['author.name'])->get();
 
 // All accept string or array
-->search('term', in: 'title')
+Post::search('term', in: 'title')->get();
 ```
 
 ## Filament Integration
@@ -75,39 +84,72 @@ Override or adjust columns per-query:
 When Filament is installed, `advancedSearchable()` is available on `TextColumn`. Add it to ONE column; it searches all configured `searchableColumns()`:
 
 ```php
-TextColumn::make('title')
-    ->advancedSearchable()
-    ->sortable(),
+TextColumn::make('title')->advancedSearchable()->sortable(),
 
 // With filtering
-TextColumn::make('title')
-    ->advancedSearchable(except: ['author.name']),
+TextColumn::make('title')->advancedSearchable(except: ['author.name']),
 
 // Custom scope method name
-TextColumn::make('title')
-    ->advancedSearchable(method: 'databaseSearch'),
+TextColumn::make('title')->advancedSearchable(method: 'databaseSearch'),
 ```
 
 ### Global Search Provider
 
+Register the provider on the panel:
+
 ```php
 use Mozex\Searchable\Filament\SearchableGlobalSearchProvider;
 
-return $panel
-    ->globalSearch(SearchableGlobalSearchProvider::class);
+return $panel->globalSearch(SearchableGlobalSearchProvider::class);
 ```
 
-Auto-uses `searchableColumns()` for resources whose model has the `Searchable` trait. Falls back to Filament's default for resources without it.
+The provider passes each resource's `getGloballySearchableAttributes()` as the `in:` filter to the model's search scope. Resources can either return all of the model's columns or a subset:
+
+```php
+// Use all searchable columns
+public static function getGloballySearchableAttributes(): array
+{
+    return new Course()->searchableColumns();
+}
+
+// Or a subset
+public static function getGloballySearchableAttributes(): array
+{
+    return ['title', 'author.name'];
+}
+```
+
+If a resource doesn't define `getGloballySearchableAttributes()` (and has no `$recordTitleAttribute` set), Filament's default returns an empty array and the provider falls back to the model's full `searchableColumns()`. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
 
 ## Laravel Scout Coexistence
 
-No conflicts. Scout adds a static `Post::search()` method; this package adds a query scope `Post::query()->search()`. They're different call paths.
+Scout adds a static `Post::search()` method; this package adds a query scope. Different call paths, so they don't collide.
 
-## Builder Method Conflicts
+In practice, having two `search` entry points on the same model is confusing. The cleaner pattern is to alias this package's scope to a different name with PHP's trait aliasing:
 
-Some packages define their own `search()` method on a custom Eloquent Builder (Corcel is a common example). When that happens, `$query->search()` calls the Builder's method instead of the scope.
+```php
+use Laravel\Scout\Searchable;
+use Mozex\Searchable\Searchable as DatabaseSearchable;
 
-For these cases, use `applySearch()` to invoke the scope directly:
+class Lesson extends Model
+{
+    use DatabaseSearchable {
+        scopeSearch as scopeDatabaseSearch;
+    }
+    use Searchable;
+}
+```
+
+Now `Lesson::search('term')` runs Scout, `Lesson::databaseSearch('term')` runs this package. For the Filament macro, pass the renamed method via `advancedSearchable(method: 'databaseSearch')`.
+
+## Existing `search` Methods on Builder or Parent
+
+Two cases where `$query->search()` won't reach this package's scope:
+
+1. **Custom Eloquent Builder owns `search()`** (Corcel's `PostBuilder` is the textbook example). The Builder's method wins.
+2. **Parent model already declares `scopeSearch`** with a different signature. PHP throws a fatal error when the trait is added because trait methods must be signature-compatible with inherited methods.
+
+For both cases, use `applySearch()` to invoke the scope without going through the `search` name:
 
 ```php
 $query = Product::query();
@@ -115,7 +157,20 @@ $query->getModel()->applySearch($query, 'term', in: ['title']);
 $results = $query->get();
 ```
 
-You can also override the conflicting method in a custom Builder to delegate back to `applySearch`, so the rest of the codebase still calls `$query->search()`:
+For the parent-model signature conflict, alias the scope when adding the trait (same pattern as the Scout case):
+
+```php
+use Mozex\Searchable\Searchable as DatabaseSearchable;
+
+class Product extends VendorModel
+{
+    use DatabaseSearchable {
+        scopeSearch as scopeDatabaseSearch;
+    }
+}
+```
+
+For the Builder case, you can also delegate back to `applySearch` from the Builder's `search()` so the rest of the codebase keeps calling `$query->search()`:
 
 ```php
 class ProductBuilder extends \Corcel\Model\Builder\PostBuilder
@@ -128,14 +183,6 @@ class ProductBuilder extends \Corcel\Model\Builder\PostBuilder
     }
 }
 ```
-
-For Filament's `advancedSearchable` macro, pass `method:` to use a different scope name:
-
-```php
-TextColumn::make('title')->advancedSearchable(method: 'databaseSearch')
-```
-
-The global search provider uses `applySearch` internally, so it works regardless of Builder conflicts.
 
 ## Common Patterns
 
