@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/packagist/l/mozex/laravel-searchable?style=flat-square)](https://packagist.org/packages/mozex/laravel-searchable)
 [![Total Downloads](https://img.shields.io/packagist/dt/mozex/laravel-searchable.svg?style=flat-square)](https://packagist.org/packages/mozex/laravel-searchable)
 
-Add a `Searchable` trait to any Eloquent model and search across multiple columns, relations, polymorphic relations, and even cross-database relations with a single `->search()` call. Works alongside Laravel Scout without conflicts, and ships with optional Filament integration for table search and global search.
+Add a `Searchable` trait to any Eloquent model and search across multiple columns, relations, polymorphic relations, and cross-database relations with a single `->search()` call. It coexists with Laravel Scout (different call paths, no collisions) and ships with optional Filament integration for table search and global search.
 
 > **[Read the full documentation at mozex.dev](https://mozex.dev/docs/laravel-searchable/v1)**: searchable docs, version requirements, detailed changelog, and more.
 
@@ -114,7 +114,7 @@ public function searchableColumns(): array
 
 ### Morph Relations
 
-For polymorphic relations, use `relation:morphType.column` notation. The morph type should match your morph map alias:
+For polymorphic relations, use `relation:morphType.column` notation. The morph type needs to match your morph map alias:
 
 ```php
 // In a ServiceProvider:
@@ -150,9 +150,9 @@ Nested relations inside morph targets work too. `commentable:post.author.name` f
 
 ### Cross-Database Relations
 
-If a BelongsTo relation points to a model on a different database connection, the package detects this automatically. It runs a separate query on the external connection, fetches matching IDs (capped at 50), and uses `whereIn` on the foreign key. No configuration needed.
+If a BelongsTo relation points to a model on a different database connection, the package picks this up on its own. Since cross-database JOINs aren't possible, it runs a separate query on the external connection, fetches matching IDs (capped at 50), and uses `whereIn` on the foreign key. Nothing to configure.
 
-The same works for morph relations to external connections.
+Morph relations to external connections work the same way.
 
 ## Column Filtering
 
@@ -172,11 +172,11 @@ Post::query()->search('term', except: ['author.name'])->get();
 Post::query()->search('term', include: ['slug'], except: ['body'])->get();
 ```
 
-All three parameters accept either a string or an array.
+All three parameters accept a string or an array.
 
 ## Filament Integration
 
-The package registers an `advancedSearchable()` macro on Filament's `TextColumn` when Filament is installed. Add it to one column in your table, and it searches across all your model's configured searchable columns:
+When Filament is installed, the package registers an `advancedSearchable()` macro on `TextColumn`. Add it to one column in your table, and it'll search across all your model's configured searchable columns:
 
 ```php
 use Filament\Tables\Columns\TextColumn;
@@ -207,13 +207,13 @@ return $panel
     ->globalSearch(SearchableGlobalSearchProvider::class);
 ```
 
-This automatically uses your model's `searchableColumns()` for any resource whose model uses the `Searchable` trait. Resources without the trait fall back to Filament's default global search.
+Any resource whose model uses the `Searchable` trait gets searched through `searchableColumns()`. Resources without the trait fall back to Filament's default global search.
 
 ## Working with Laravel Scout
 
-This package coexists with Laravel Scout without conflicts. Scout adds a static `search()` method on the model class (`Post::search('term')`), while this package adds a query scope (`Post::query()->search('term')`). They don't collide.
+Scout adds a static `search()` method on the model class (`Post::search('term')`). This package adds a query scope (`Post::query()->search('term')`). Different call paths, so they don't collide.
 
-If you need to use a different scope name (for any reason), the Filament macro supports a `method` parameter:
+If you need a different scope name, the Filament macro supports a `method` parameter:
 
 ```php
 TextColumn::make('title')
