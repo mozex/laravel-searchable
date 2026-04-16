@@ -67,8 +67,7 @@ class SearchableGlobalSearchProvider implements GlobalSearchProvider
         /** @var Builder<Model> $query */
         $query = $resource::getGlobalSearchEloquentQuery();
 
-        // The model is verified to use the Searchable trait via hasSearchableTrait()
-        $query->search($search); // @phpstan-ignore method.notFound
+        $query->getModel()->applySearch($query, $search); // @phpstan-ignore method.notFound
 
         $resource::modifyGlobalSearchQuery($query, $search);
 

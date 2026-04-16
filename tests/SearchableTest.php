@@ -321,4 +321,16 @@ describe('query integration', function () {
             ->and($results->pluck('id')->sort()->values()->all())
             ->toBe([$comment1->id, $comment2->id, $comment3->id]);
     });
+
+    it('supports applySearch for models with Builder search conflicts', function () {
+        Post::factory()->create(['title' => 'Laravel Guide']);
+        Post::factory()->create(['title' => 'Vue Guide']);
+
+        $query = Post::query();
+        $query->getModel()->applySearch($query, 'Laravel', in: ['title']);
+        $results = $query->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->title)->toBe('Laravel Guide');
+    });
 });

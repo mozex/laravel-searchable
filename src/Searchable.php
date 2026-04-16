@@ -24,6 +24,28 @@ trait Searchable
     }
 
     /**
+     * Invoke the search scope directly, bypassing the query builder.
+     *
+     * Use this when the model's Builder already has a search() method
+     * (e.g., from a third-party package like Corcel) and the scope
+     * can't be reached through $query->search().
+     *
+     * @param  Builder<static>  $query
+     * @param  string|array<int, string>  $in
+     * @param  string|array<int, string>  $include
+     * @param  string|array<int, string>  $except
+     */
+    public function applySearch(
+        Builder $query,
+        ?string $search,
+        string|array $in = [],
+        string|array $include = [],
+        string|array $except = []
+    ): void {
+        $this->scopeSearch($query, $search, $in, $include, $except);
+    }
+
+    /**
      * @param  Builder<static>  $query
      * @param  string|array<int, string>  $in
      * @param  string|array<int, string>  $include
