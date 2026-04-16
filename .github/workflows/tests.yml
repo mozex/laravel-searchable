@@ -1,0 +1,37 @@
+name: Tests
+
+on: ['push', 'pull_request']
+
+jobs:
+  ci:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest]
+        php: [8.2, 8.3, 8.4]
+        dependency-version: [prefer-lowest, prefer-stable]
+
+    name: Tests P${{ matrix.php }} - ${{ matrix.os }} - ${{ matrix.dependency-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.composer/cache/files
+          key: dependencies-php-${{ matrix.php }}-${{ matrix.dependency-version }}-composer-${{ hashFiles('composer.json') }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, mbstring, zip
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction
+
+      - name: Integration Tests
+        run: php ./vendor/bin/pest
