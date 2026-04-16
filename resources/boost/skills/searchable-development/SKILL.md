@@ -119,7 +119,7 @@ public static function getGloballySearchableAttributes(): array
 }
 ```
 
-If a resource doesn't define `getGloballySearchableAttributes()` (and has no `$recordTitleAttribute` set), Filament's default returns an empty array and the provider falls back to the model's full `searchableColumns()`. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
+Each resource you want in global search MUST define `getGloballySearchableAttributes()`. Resources without it are excluded from global search entirely. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
 
 ## Laravel Scout Coexistence
 

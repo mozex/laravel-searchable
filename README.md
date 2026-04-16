@@ -241,7 +241,7 @@ class PostResource extends Resource
 }
 ```
 
-You don't have to define `getGloballySearchableAttributes()` on every resource. When you skip it, Filament's default returns an empty array and the provider falls back to the model's full `searchableColumns()`. Define the method only when you want to scope global search to a specific subset.
+Each resource you want in global search needs to define `getGloballySearchableAttributes()`. Resources without it are excluded from global search entirely.
 
 Resources whose models don't use the `Searchable` trait fall through to Filament's default global search behavior.
 
