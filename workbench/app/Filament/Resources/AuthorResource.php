@@ -20,7 +20,7 @@ class AuthorResource extends Resource
      */
     public static function getGloballySearchableAttributes(): array
     {
-        return new Author()->searchableColumns();
+        return (new Author)->searchableColumns();
     }
 
     public static function getGlobalSearchResultUrl(Model $record): string

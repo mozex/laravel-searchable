@@ -226,7 +226,7 @@ class CourseResource extends Resource
     // Use everything the model declared as searchable
     public static function getGloballySearchableAttributes(): array
     {
-        return new Course()->searchableColumns();
+        return (new Course)->searchableColumns();
     }
 }
 
@@ -323,7 +323,7 @@ class ProductBuilder extends \Corcel\Model\Builder\PostBuilder
     {
         $query = Product::query();
 
-        new Product()->applySearch($query, $term, ...$args);
+        (new Product)->applySearch($query, $term, ...$args);
 
         return $query;
     }

@@ -109,7 +109,7 @@ The provider passes each resource's `getGloballySearchableAttributes()` as the `
 // Use all searchable columns
 public static function getGloballySearchableAttributes(): array
 {
-    return new Course()->searchableColumns();
+    return (new Course)->searchableColumns();
 }
 
 // Or a subset
@@ -178,7 +178,7 @@ class ProductBuilder extends \Corcel\Model\Builder\PostBuilder
     public function search($term = false, ...$args): self
     {
         $query = Product::query();
-        new Product()->applySearch($query, $term, ...$args);
+        (new Product)->applySearch($query, $term, ...$args);
         return $query;
     }
 }
@@ -194,7 +194,7 @@ public function searchableColumns(): array
     return [
         'name',
         'slug',
-        ...collect(new Faq()->searchableColumns())
+        ...collect((new Faq)->searchableColumns())
             ->map(fn (string $column): string => 'faqs.' . $column)
             ->toArray(),
     ];
