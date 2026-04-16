@@ -9,6 +9,7 @@ use Filament\Facades\Filament;
 use Filament\GlobalSearch\GlobalSearchResult;
 use Filament\GlobalSearch\GlobalSearchResults;
 use Filament\GlobalSearch\Providers\Contracts\GlobalSearchProvider;
+use Filament\Resources\Resource;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -66,7 +67,15 @@ class SearchableGlobalSearchProvider implements GlobalSearchProvider
         /** @var Builder<Model> $query */
         $query = $resource::getGlobalSearchEloquentQuery();
 
-        $query->getModel()->applySearch($query, $search); // @phpstan-ignore method.notFound
+        // Pass the resource's globally searchable attributes as the `in:` filter.
+        // The resource's getGloballySearchableAttributes() declares which subset
+        // of the model's searchableColumns() should be used in global search.
+        // If empty, applySearch falls back to the model's full searchableColumns().
+        $query->getModel()->applySearch( // @phpstan-ignore method.notFound
+            $query,
+            $search,
+            in: $resource::getGloballySearchableAttributes(),
+        );
 
         $resource::modifyGlobalSearchQuery($query, $search);
 

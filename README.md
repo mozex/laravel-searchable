@@ -207,9 +207,9 @@ TextColumn::make('title')
 
 ### Global Search
 
-There are two ways to wire up global search.
+Global search needs both pieces wired up: the provider on your panel AND `getGloballySearchableAttributes()` on each resource. They work together, not as alternatives.
 
-**Option 1: Register the provider on your panel.** This replaces Filament's default global search across all resources. Any resource whose model uses the `Searchable` trait gets searched through `searchableColumns()`. Resources without the trait fall back to Filament's default behavior.
+**Step 1: Register the provider on your panel.** This replaces Filament's default global search so the provider can run the model's search scope across all your trait-using resources.
 
 ```php
 use Mozex\Searchable\Filament\SearchableGlobalSearchProvider;
@@ -220,21 +220,32 @@ return $panel
     ->globalSearch(SearchableGlobalSearchProvider::class);
 ```
 
-**Option 2: Reuse `searchableColumns()` on individual resources.** If you want to keep Filament's default global search but avoid duplicating column lists, return the model's columns from `getGloballySearchableAttributes()`:
+**Step 2: Declare which columns each resource should search.** The provider passes whatever you return from `getGloballySearchableAttributes()` as the `in:` filter to the search scope. Return all of the model's columns to search everything, or a subset to scope global search to specific columns:
 
 ```php
 use Filament\Resources\Resource;
 
 class CourseResource extends Resource
 {
+    // Use all columns the model declared as searchable
     public static function getGloballySearchableAttributes(): array
     {
         return new Course()->searchableColumns();
     }
 }
+
+class PostResource extends Resource
+{
+    // Or limit global search to a specific subset, even though
+    // the Post model has more columns in searchableColumns()
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['title', 'author.name'];
+    }
+}
 ```
 
-This works without registering the provider. Filament's default global search will use the columns you defined on the model.
+If a resource doesn't override `getGloballySearchableAttributes()`, the provider falls back to the model's full `searchableColumns()`. Resources whose models don't use the `Searchable` trait fall through to Filament's default global search.
 
 ## Handling Conflicts
 
