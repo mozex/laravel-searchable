@@ -1,37 +1,47 @@
 <?php
 
-namespace VendorName\Skeleton\Tests;
+declare(strict_types=1);
 
-use Illuminate\Database\Eloquent\Factories\Factory;
+namespace Mozex\Searchable\Tests;
+
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase as Orchestra;
-use VendorName\Skeleton\SkeletonServiceProvider;
+use Workbench\App\Models\Category;
+use Workbench\App\Models\Post;
 
 class TestCase extends Orchestra
 {
+    use WithWorkbench;
+
+    /** @var array<int, string> */
+    protected $connectionsToTransact = ['testing', 'external'];
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'VendorName\\Skeleton\\Database\\Factories\\'.class_basename($modelName).'Factory'
-        );
+        Relation::morphMap([
+            'post' => Post::class,
+            'category' => Category::class,
+        ]);
     }
 
-    protected function getPackageProviders($app)
+    protected function defineEnvironment($app): void
     {
-        return [
-            SkeletonServiceProvider::class,
-        ];
+        $app['config']->set('database.default', 'testing');
+        $app['config']->set('database.connections.testing', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+        ]);
+        $app['config']->set('database.connections.external', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+        ]);
     }
 
-    public function getEnvironmentSetUp($app)
+    protected function defineDatabaseMigrations(): void
     {
-        config()->set('database.default', 'testing');
-
-        /*
-         foreach (\Illuminate\Support\Facades\File::allFiles(__DIR__ . '/../database/migrations') as $migration) {
-            (include $migration->getRealPath())->up();
-         }
-         */
+        $this->loadMigrationsFrom(__DIR__.'/../workbench/database/migrations');
     }
 }
