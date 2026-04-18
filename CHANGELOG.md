@@ -8,6 +8,7 @@ All notable changes to `laravel-searchable` will be documented in this file.
 
 * fix PHPStan conflict with mixin
 * improve docs
+* Add externalLimit cap for external searches
 
 **Full Changelog**: https://github.com/mozex/laravel-searchable/compare/1.0.1...1.0.2
 
