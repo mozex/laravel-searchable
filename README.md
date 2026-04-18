@@ -21,6 +21,7 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
   - [Cross-Database Relations](#cross-database-relations)
 - [Case Sensitivity](#case-sensitivity)
 - [Column Filtering](#column-filtering)
+- [Performance](#performance)
 - [Filament Integration](#filament-integration)
   - [Global Search](#global-search)
 - [Handling Conflicts](#handling-conflicts)
@@ -95,6 +96,8 @@ Comment::query()
 The search wraps all its conditions in a `WHERE (... OR ...)` group, so it plays nicely with any existing query constraints.
 
 ## Search Types
+
+Dot is for regular relations (`author.name`), colon is for morph relations where you have to name the target type because the package can't infer it (`commentable:post.title`).
 
 ### Direct Columns
 
@@ -205,6 +208,10 @@ Post::search('term', include: ['slug'], except: ['body'])->get();
 ```
 
 All three parameters accept a string or an array.
+
+## Performance
+
+This package compiles to `LIKE '%term%'`, which can't use B-tree indexes because of the leading wildcard. Relation and morph columns wrap that in a `whereHas` subquery, so each searchable relation adds a join's worth of work. Up to a few hundred thousand rows on indexed columns it's fine; past a couple of million, or once a search hits five-plus relations, reach for Laravel Scout with Meilisearch, Typesense, or Algolia instead. Make sure the columns you search are at least indexed, and on Postgres consider a `pg_trgm` GIN index for true substring matching at scale.
 
 ## Filament Integration
 
