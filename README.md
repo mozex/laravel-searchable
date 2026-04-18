@@ -211,7 +211,7 @@ All three parameters accept a string or an array.
 
 ## Performance
 
-This package compiles to `LIKE '%term%'`, which can't use B-tree indexes because of the leading wildcard. Relation and morph columns wrap that in a `whereHas` subquery, so each searchable relation adds a join's worth of work. Up to a few hundred thousand rows on indexed columns it's fine; past a couple of million, or once a search hits five-plus relations, reach for Laravel Scout with Meilisearch, Typesense, or Algolia instead. Make sure the columns you search are at least indexed, and on Postgres consider a `pg_trgm` GIN index for true substring matching at scale.
+This package compiles to `LIKE '%term%'`. The leading wildcard defeats B-tree indexes, so every row in the searched column gets scanned, and each relation or morph column adds a correlated `EXISTS` subquery on top. On small-to-mid tables this is fine; into the millions of rows, or once a search hits many relations, switch to Laravel Scout with Meilisearch, Typesense, or Algolia. Indexing the searched columns themselves won't help, but indexing the columns you also filter on (e.g., `tenant_id`, `status`) lets the database prune rows before the `LIKE` runs. On Postgres, a `pg_trgm` GIN index is the one thing that genuinely speeds up `LIKE '%term%'` while staying in SQL.
 
 ## Filament Integration
 
