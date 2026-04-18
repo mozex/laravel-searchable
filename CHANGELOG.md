@@ -2,6 +2,15 @@
 
 All notable changes to `laravel-searchable` will be documented in this file.
 
+## 1.0.2 - 2026-04-18
+
+### What's changed
+
+* fix PHPStan conflict with mixin
+* improve docs
+
+**Full Changelog**: https://github.com/mozex/laravel-searchable/compare/1.0.1...1.0.2
+
 ## 1.0.1 - 2026-04-16
 
 ### What's changed
