@@ -37,9 +37,10 @@ trait Searchable
         ?string $search,
         string|array $in = [],
         string|array $include = [],
-        string|array $except = []
+        string|array $except = [],
+        int $externalLimit = 50
     ): void {
-        $this->scopeSearch($query, $search, $in, $include, $except);
+        $this->scopeSearch($query, $search, $in, $include, $except, $externalLimit);
     }
 
     /**
@@ -53,7 +54,8 @@ trait Searchable
         ?string $search,
         string|array $in = [],
         string|array $include = [],
-        string|array $except = []
+        string|array $except = [],
+        int $externalLimit = 50
     ): void {
         if (empty($search)) {
             return;
@@ -65,11 +67,11 @@ trait Searchable
             return;
         }
 
-        $query->where(function (Builder $query) use ($columns, $search): void {
+        $query->where(function (Builder $query) use ($columns, $search, $externalLimit): void {
             $grouped = $this->groupColumnsByType($query, $columns);
 
             foreach ($grouped['external_morph'] as $column) {
-                $this->applyExternalMorphSearch($query, $column, $search);
+                $this->applyExternalMorphSearch($query, $column, $search, $externalLimit);
             }
 
             foreach ($grouped['morph'] as $column) {
@@ -77,7 +79,7 @@ trait Searchable
             }
 
             foreach ($grouped['external'] as $column) {
-                $this->applyExternalRelationSearch($query, $column, $search);
+                $this->applyExternalRelationSearch($query, $column, $search, $externalLimit);
             }
 
             foreach ($grouped['relation'] as $column) {
@@ -240,7 +242,7 @@ trait Searchable
     /**
      * @param  Builder<static>  $query
      */
-    protected function applyExternalRelationSearch(Builder $query, string $column, string $search): void
+    protected function applyExternalRelationSearch(Builder $query, string $column, string $search, int $limit): void
     {
         [$relationName, $columnName] = $this->splitRelationColumn($column);
 
@@ -252,7 +254,7 @@ trait Searchable
             $relation->getRelated()
                 ->newQuery()
                 ->whereLike($columnName, "%{$search}%")
-                ->take(50)
+                ->take($limit)
                 ->pluck($relation->getRelated()->getKeyName())
         );
     }
@@ -287,7 +289,7 @@ trait Searchable
     /**
      * @param  Builder<static>  $query
      */
-    protected function applyExternalMorphSearch(Builder $query, string $column, string $search): void
+    protected function applyExternalMorphSearch(Builder $query, string $column, string $search, int $limit): void
     {
         [$relationName, $columnName, $morphModel, $morphType] = $this->parseMorphColumn($column);
 
@@ -298,7 +300,7 @@ trait Searchable
                     "{$relationName}_id",
                     $morphModel->newQuery()
                         ->whereLike($columnName, "%{$search}%")
-                        ->take(50)
+                        ->take($limit)
                         ->pluck($morphModel->getKeyName())
                 )
         );

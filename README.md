@@ -162,9 +162,17 @@ Nested relations inside morph targets work too. `commentable:post.author.name` f
 
 ### Cross-Database Relations
 
-If a BelongsTo relation points to a model on a different database connection, the package picks this up on its own. Since cross-database JOINs aren't possible, it runs a separate query on the external connection, fetches matching IDs (capped at 50), and uses `whereIn` on the foreign key. Nothing to configure.
+If a BelongsTo relation points to a model on a different database connection, the package picks this up on its own. Since cross-database JOINs aren't possible, it runs a separate query on the external connection, fetches matching IDs (capped at 50 by default), and uses `whereIn` on the foreign key.
 
 Morph relations to external connections work the same way.
+
+The cap keeps the resulting `IN (...)` clause from getting unmanageably large when a search term hits a lot of rows on the external side. If 50 isn't the right number for your data, pass `externalLimit`:
+
+```php
+Post::search('term', externalLimit: 200)->get();
+```
+
+The same parameter works on `applySearch()` and on the Filament `advancedSearchable()` macro.
 
 ## Case Sensitivity
 

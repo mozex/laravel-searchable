@@ -233,7 +233,7 @@ describe('external relation search', function () {
             ->and($results->first()->title)->toBe('Post A');
     });
 
-    it('caps the external subquery at 50 matching IDs', function () {
+    it('caps the external subquery at 50 matching IDs by default', function () {
         // Cross-database search runs a subquery on the external connection capped at 50 IDs.
         // Create 60 matching categories with one post each. The search should hit at most 50 posts.
         for ($i = 1; $i <= 60; $i++) {
@@ -244,6 +244,19 @@ describe('external relation search', function () {
         $results = Post::query()->search('Tech Topic', in: ['category.name'])->get();
 
         expect($results->count())->toBeLessThanOrEqual(50);
+    });
+
+    it('allows the external cap to be configured via externalLimit', function () {
+        for ($i = 1; $i <= 10; $i++) {
+            $category = Category::factory()->create(['name' => "Tech Topic {$i}"]);
+            Post::factory()->create(['category_id' => $category->id]);
+        }
+
+        $results = Post::query()
+            ->search('Tech Topic', in: ['category.name'], externalLimit: 3)
+            ->get();
+
+        expect($results)->toHaveCount(3);
     });
 });
 

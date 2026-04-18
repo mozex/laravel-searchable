@@ -52,8 +52,8 @@ Five column types, detected automatically from the string format:
 | Direct | `column` | `'title'` | `orWhereLike` on the column |
 | Relation | `relation.column` | `'author.name'` | `orWhereHas` with `whereLike` |
 | Morph | `relation:type.column` | `'commentable:post.title'` | `orWhereHasMorph` |
-| External | `relation.column` (different DB) | `'product.name'` | `orWhereIn` with subquery (max 50 IDs) |
-| External morph | `relation:type.column` (different DB) | `'commentable:product.name'` | type check + `whereIn` subquery |
+| External | `relation.column` (different DB) | `'product.name'` | `orWhereIn` with subquery (default cap of 50 IDs) |
+| External morph | `relation:type.column` (different DB) | `'commentable:product.name'` | type check + `whereIn` subquery (same cap) |
 
 External relations are auto-detected when the related model's `$connection` differs from the current model's. Only `BelongsTo` relations are detected as external (HasMany on a different connection falls through to regular relation search).
 
@@ -88,6 +88,20 @@ Post::search('term', except: ['author.name'])->get();
 // All accept string or array
 Post::search('term', in: 'title')->get();
 ```
+
+### Adjusting the Cross-Database Cap
+
+External relation and external morph columns run a subquery on the other connection and feed matching IDs into a `whereIn`. The subquery caps results at 50 by default to keep the `IN (...)` clause sane. Override per-query with `externalLimit`:
+
+```php
+Post::search('term', externalLimit: 200)->get();
+
+// Same parameter works on applySearch and the Filament macro
+$model->applySearch($query, 'term', externalLimit: 200);
+TextColumn::make('title')->advancedSearchable(externalLimit: 200);
+```
+
+The parameter is ignored when no external columns are involved.
 
 ## Filament Integration
 
