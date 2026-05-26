@@ -1,7 +1,7 @@
 # Laravel Searchable
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/mozex/laravel-searchable.svg?style=flat-square)](https://packagist.org/packages/mozex/laravel-searchable)
-[![GitHub Tests Action Status](https://img.shields.io/github/actions/workflow/status/mozex/laravel-searchable/tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/mozex/laravel-searchable/actions?query=workflow%3ATests+branch%3Amain)
+[![GitHub Checks Action Status](https://img.shields.io/github/actions/workflow/status/mozex/laravel-searchable/checks.yml?branch=main&label=checks&style=flat-square)](https://github.com/mozex/laravel-searchable/actions?query=workflow%3AChecks+branch%3Amain)
 [![Docs](https://img.shields.io/badge/docs-mozex.dev-10B981?style=flat-square)](https://mozex.dev/docs/laravel-searchable/v1)
 [![License](https://img.shields.io/packagist/l/mozex/laravel-searchable?style=flat-square)](https://packagist.org/packages/mozex/laravel-searchable)
 [![Total Downloads](https://img.shields.io/packagist/dt/mozex/laravel-searchable.svg?style=flat-square)](https://packagist.org/packages/mozex/laravel-searchable)
