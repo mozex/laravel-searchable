@@ -1,12 +1,43 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Workbench\App\Models\Author;
 use Workbench\App\Models\Category;
 use Workbench\App\Models\Comment;
 use Workbench\App\Models\Post;
 
 uses(RefreshDatabase::class);
+
+describe('case-insensitive matching', function () {
+    // Force LIKE to compare case-sensitively, mirroring MySQL's binary-collated
+    // JSON columns (used by translatable models), where a plain LIKE silently
+    // misses matches of a different case.
+    beforeEach(function () {
+        DB::connection('testing')->statement('PRAGMA case_sensitive_like = ON');
+    });
+
+    afterEach(function () {
+        DB::connection('testing')->statement('PRAGMA case_sensitive_like = OFF');
+    });
+
+    it('matches a direct column regardless of case', function () {
+        // The reported bug: a "Clean Water" row was found for "Clean" or "water"
+        // but not for the lowercased phrase "clean water".
+        Post::factory()->create(['title' => 'Clean Water']);
+
+        expect(Post::query()->search('clean water', in: ['title'])->get())->toHaveCount(1)
+            ->and(Post::query()->search('CLEAN WATER', in: ['title'])->get())->toHaveCount(1)
+            ->and(Post::query()->search('Clean Water', in: ['title'])->get())->toHaveCount(1);
+    });
+
+    it('matches a relation column regardless of case', function () {
+        $author = Author::factory()->create(['name' => 'Clean Water']);
+        Post::factory()->create(['author_id' => $author->id, 'title' => 'Some post']);
+
+        expect(Post::query()->search('clean water', in: ['author.name'])->get())->toHaveCount(1);
+    });
+});
 
 describe('direct column search', function () {
     it('searches in a single column', function () {

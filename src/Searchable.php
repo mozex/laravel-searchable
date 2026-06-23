@@ -219,11 +219,33 @@ trait Searchable
     }
 
     /**
+     * Apply a case-insensitive LIKE constraint.
+     *
+     * Both operands are lowercased so matching stays case-insensitive even on
+     * binary-collated columns - notably the JSON columns translatable models
+     * use, which MySQL compares case-sensitively under a plain LIKE. Relying on
+     * the column collation (as orWhereLike/whereLike do) silently misses matches
+     * on those columns.
+     *
+     * @param  Builder<*>  $query
+     * @return Builder<*>
+     */
+    protected function whereSearchLike(Builder $query, string $column, string $search, bool $or = false): Builder
+    {
+        $sql = 'LOWER('.$query->getQuery()->getGrammar()->wrap($column).') LIKE ?';
+        $bindings = ['%'.mb_strtolower($search).'%'];
+
+        return $or
+            ? $query->orWhereRaw($sql, $bindings)
+            : $query->whereRaw($sql, $bindings);
+    }
+
+    /**
      * @param  Builder<static>  $query
      */
     protected function applyDirectSearch(Builder $query, string $column, string $search): void
     {
-        $query->orWhereLike($column, "%{$search}%");
+        $this->whereSearchLike($query, $column, $search, or: true);
     }
 
     /**
@@ -235,7 +257,7 @@ trait Searchable
 
         $query->orWhereHas(
             $relationName,
-            fn (Builder $q): Builder => $q->whereLike($columnName, "%{$search}%")
+            fn (Builder $q): Builder => $this->whereSearchLike($q, $columnName, $search)
         );
     }
 
@@ -251,9 +273,7 @@ trait Searchable
 
         $query->orWhereIn(
             $relation->getForeignKeyName(),
-            $relation->getRelated()
-                ->newQuery()
-                ->whereLike($columnName, "%{$search}%")
+            $this->whereSearchLike($relation->getRelated()->newQuery(), $columnName, $search)
                 ->take($limit)
                 ->pluck($relation->getRelated()->getKeyName())
         );
@@ -275,13 +295,13 @@ trait Searchable
 
                     $q->whereHas(
                         $subRelation,
-                        fn (Builder $q): Builder => $q->whereLike($subColumn, "%{$search}%")
+                        fn (Builder $q): Builder => $this->whereSearchLike($q, $subColumn, $search)
                     );
 
                     return;
                 }
 
-                $q->whereLike($columnName, "%{$search}%");
+                $this->whereSearchLike($q, $columnName, $search);
             }
         );
     }
@@ -298,8 +318,7 @@ trait Searchable
                 ->where("{$relationName}_type", $morphType)
                 ->whereIn(
                     "{$relationName}_id",
-                    $morphModel->newQuery()
-                        ->whereLike($columnName, "%{$search}%")
+                    $this->whereSearchLike($morphModel->newQuery(), $columnName, $search)
                         ->take($limit)
                         ->pluck($morphModel->getKeyName())
                 )
