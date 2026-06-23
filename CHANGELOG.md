@@ -2,6 +2,15 @@
 
 All notable changes to `laravel-searchable` will be documented in this file.
 
+## 1.0.3 - 2026-06-23
+
+### What's Changed
+
+* fix json column case sensitivity
+* Bump the github-actions group across 1 directory with 2 updates by @dependabot[bot] in https://github.com/mozex/laravel-searchable/pull/2
+
+**Full Changelog**: https://github.com/mozex/laravel-searchable/compare/1.0.2...1.0.3
+
 ## 1.0.2 - 2026-04-18
 
 ### What's changed
