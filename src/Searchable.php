@@ -143,7 +143,6 @@ trait Searchable
             'relation' => $columns->filter(
                 fn (string $column): bool => $this->isRelationColumn($column)
                     && ! $this->isMorphColumn($column)
-                    && ! $this->isMorphToColumn($query, $column)
                     && ! $this->isExternalRelation($query, $column)
             ),
             'morph' => $columns->filter(
@@ -168,10 +167,15 @@ trait Searchable
     }
 
     /**
-     * A MorphTo referenced via dot notation (e.g. `commentable.title`) can't be
-     * resolved to a single related model, so it can't be searched or scored.
-     * Use the typed morph syntax (`commentable:type.title`) instead. Such a
-     * column is skipped rather than producing invalid SQL.
+     * Whether a dot-notation column points at a MorphTo relation.
+     *
+     * The WHERE still searches it via `whereHas` (which works wherever Eloquent
+     * can resolve the morph's target types, and is a harmless no-op otherwise),
+     * so its matching behaviour is unchanged. It is only skipped in the
+     * relevance ORDER BY: an unconstrained MorphTo can't be resolved to a single
+     * related model for scoring, and trying would build a subquery against the
+     * wrong table. Use the typed morph syntax (`commentable:type.title`) to also
+     * get relevance ranking on a morph target.
      *
      * @param  Builder<static>  $query
      */

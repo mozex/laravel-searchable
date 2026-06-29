@@ -59,7 +59,7 @@ External relations are auto-detected when the related model's `$connection` diff
 
 Nested morph relations work: `'commentable:post.author.name'` resolves the morph to Post, then follows the `author` relation.
 
-A `MorphTo` MUST use the typed colon syntax. Writing it as plain dot notation (`'commentable.title'`) can't resolve to a single model, so the package skips that column instead of erroring. Use `'commentable:post.title'`.
+Prefer the typed colon syntax for a `MorphTo`. Plain dot notation (`'commentable.title'`) still searches via `whereHas`, but it can't be relevance-ranked (no single target model to score), so it's skipped in the ordering only. Use `'commentable:post.title'` to get ranking too.
 
 ## Case Sensitivity
 

@@ -251,27 +251,44 @@ describe('morph search', function () {
 });
 
 describe('untyped morph relation in dot notation', function () {
-    // A MorphTo referenced with dot notation (e.g. `commentable.title`) can't
-    // resolve to a single related model. Before the fix, relevance ordering
-    // built a subquery against the wrong table and threw a SQL error. It must
-    // be skipped instead, while sibling columns keep working.
-    it('skips the column instead of throwing a SQL error', function () {
-        $post = Post::factory()->create(['title' => 'Laravel']);
+    // A MorphTo referenced with dot notation (e.g. `commentable.title`) keeps
+    // its WHERE search (via `whereHas`, which works wherever Eloquent can
+    // resolve the morph targets and is a harmless no-op otherwise). Only the
+    // relevance ORDER BY skips it: an unconstrained MorphTo can't be scored
+    // without building a subquery against the wrong table, which used to throw.
+    it('searches the morph target via whereHas', function () {
+        $laravelPost = Post::factory()->create(['title' => 'Laravel']);
+        $vuePost = Post::factory()->create(['title' => 'Vue']);
         $match = Comment::factory()->create([
-            'body' => 'Laravel comment',
+            'body' => 'x',
             'commentable_type' => 'post',
-            'commentable_id' => $post->id,
+            'commentable_id' => $laravelPost->id,
         ]);
         Comment::factory()->create([
-            'body' => 'Unrelated',
+            'body' => 'y',
             'commentable_type' => 'post',
-            'commentable_id' => $post->id,
+            'commentable_id' => $vuePost->id,
         ]);
 
-        $results = Comment::query()->search('Laravel', in: ['body', 'commentable.title'])->get();
+        // Dot-notation morph column: still searched via whereHas, which resolves
+        // the morph target from the morph map and matches the related post title.
+        $results = Comment::query()->search('Laravel', in: ['commentable.title'])->get();
 
         expect($results)->toHaveCount(1)
             ->and($results->first()->id)->toBe($match->id);
+    });
+
+    it('keeps the morph column in the WHERE rather than dropping it', function () {
+        Comment::factory()->count(3)->create();
+
+        // Searching only an untyped morph column still applies its `whereHas`
+        // (a no-op on a bare MorphTo here), so nothing matches. If the column
+        // were silently dropped, the empty WHERE would wrongly return all rows.
+        $results = Comment::query()
+            ->search('anything', in: ['commentable.title'], orderByRelevance: false)
+            ->get();
+
+        expect($results)->toHaveCount(0);
     });
 
     it('does not add a relevance order key for the untyped morph column', function () {
