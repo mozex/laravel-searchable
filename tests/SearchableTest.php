@@ -250,6 +250,39 @@ describe('morph search', function () {
     });
 });
 
+describe('untyped morph relation in dot notation', function () {
+    // A MorphTo referenced with dot notation (e.g. `commentable.title`) can't
+    // resolve to a single related model. Before the fix, relevance ordering
+    // built a subquery against the wrong table and threw a SQL error. It must
+    // be skipped instead, while sibling columns keep working.
+    it('skips the column instead of throwing a SQL error', function () {
+        $post = Post::factory()->create(['title' => 'Laravel']);
+        $match = Comment::factory()->create([
+            'body' => 'Laravel comment',
+            'commentable_type' => 'post',
+            'commentable_id' => $post->id,
+        ]);
+        Comment::factory()->create([
+            'body' => 'Unrelated',
+            'commentable_type' => 'post',
+            'commentable_id' => $post->id,
+        ]);
+
+        $results = Comment::query()->search('Laravel', in: ['body', 'commentable.title'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($match->id);
+    });
+
+    it('does not add a relevance order key for the untyped morph column', function () {
+        $query = Comment::query();
+        $query->getModel()->applySearch($query, 'Laravel', in: ['body', 'commentable.title']);
+
+        // Only `body` contributes an ORDER BY key; the MorphTo column is skipped.
+        expect($query->getQuery()->orders)->toHaveCount(1);
+    });
+});
+
 describe('external relation search', function () {
     it('searches in BelongsTo relation on external connection', function () {
         $cat1 = Category::factory()->create(['name' => 'Programming']);

@@ -59,6 +59,8 @@ External relations are auto-detected when the related model's `$connection` diff
 
 Nested morph relations work: `'commentable:post.author.name'` resolves the morph to Post, then follows the `author` relation.
 
+A `MorphTo` MUST use the typed colon syntax. Writing it as plain dot notation (`'commentable.title'`) can't resolve to a single model, so the package skips that column instead of erroring. Use `'commentable:post.title'`.
+
 ## Case Sensitivity
 
 All search types use Laravel's `whereLike`, so matching is case-insensitive by default. `Post::search('LARAVEL')` matches `laravel`, `Laravel`, and `LARAVEL` with no extra flag.

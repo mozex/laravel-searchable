@@ -165,6 +165,8 @@ class Comment extends Model
 
 Nested relations inside morph targets work too. `commentable:post.author.name` first resolves the morph to a Post, then follows the `author` relation on Post to search the author's name.
 
+You need the morph type. A `MorphTo` written in plain dot notation (`commentable.title`, no type) can't resolve to a single model, so the package skips that column rather than guessing. Always name the type with the colon syntax.
+
 ### Cross-Database Relations
 
 If a BelongsTo relation points to a model on a different database connection, the package picks this up on its own. Since cross-database JOINs aren't possible, it runs a separate query on the external connection, fetches matching IDs (capped at 50 by default), and uses `whereIn` on the foreign key.

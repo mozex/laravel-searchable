@@ -7,6 +7,7 @@ namespace Mozex\Searchable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 
@@ -142,6 +143,7 @@ trait Searchable
             'relation' => $columns->filter(
                 fn (string $column): bool => $this->isRelationColumn($column)
                     && ! $this->isMorphColumn($column)
+                    && ! $this->isMorphToColumn($query, $column)
                     && ! $this->isExternalRelation($query, $column)
             ),
             'morph' => $columns->filter(
@@ -165,6 +167,21 @@ trait Searchable
         return str_contains($column, '.');
     }
 
+    /**
+     * A MorphTo referenced via dot notation (e.g. `commentable.title`) can't be
+     * resolved to a single related model, so it can't be searched or scored.
+     * Use the typed morph syntax (`commentable:type.title`) instead. Such a
+     * column is skipped rather than producing invalid SQL.
+     *
+     * @param  Builder<static>  $query
+     */
+    protected function isMorphToColumn(Builder $query, string $column): bool
+    {
+        [$relationName] = explode('.', $column, 2);
+
+        return $query->getRelation($relationName) instanceof MorphTo;
+    }
+
     protected function isMorphColumn(string $column): bool
     {
         return str_contains($column, ':') && str_contains($column, '.');
@@ -179,7 +196,7 @@ trait Searchable
 
         $relation = $query->getRelation($relationName);
 
-        if (! $relation instanceof BelongsTo) {
+        if (! $relation instanceof BelongsTo || $relation instanceof MorphTo) {
             return false;
         }
 
@@ -409,6 +426,10 @@ trait Searchable
             return $this->isExternalMorph($column)
                 ? $this->externalMorphRelevanceScore($query, $column, $search, $externalLimit)
                 : $this->morphRelevanceScore($query, $column, $search);
+        }
+
+        if ($this->isMorphToColumn($query, $column)) {
+            return null;
         }
 
         if ($this->isExternalRelation($query, $column)) {
