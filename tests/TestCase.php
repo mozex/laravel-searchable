@@ -29,6 +29,8 @@ class TestCase extends Orchestra
 
     protected function defineEnvironment($app): void
     {
+        // Livewire signs its render snapshot, so component tests need an app key.
+        $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', [
             'driver' => 'sqlite',

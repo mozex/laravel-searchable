@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Mozex\Searchable;
 
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Mozex\Searchable\Filament\RelevanceSort;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -19,6 +21,16 @@ class SearchableServiceProvider extends PackageServiceProvider
     public function packageBooted(): void
     {
         $this->registerFilamentMacros();
+        $this->registerFilamentRelevanceSort();
+    }
+
+    protected function registerFilamentRelevanceSort(): void
+    {
+        if (! class_exists(Table::class)) {
+            return;
+        }
+
+        RelevanceSort::register();
     }
 
     protected function registerFilamentMacros(): void
@@ -27,6 +39,11 @@ class SearchableServiceProvider extends PackageServiceProvider
             return;
         }
 
+        // Builds the search WHERE only. Filament runs this inside a nested
+        // WHERE closure, so relevance ordering can't ride along here (the
+        // orderBy would be discarded). Ranking is applied separately and
+        // automatically by the global RelevanceSort query scope (registered in
+        // registerFilamentRelevanceSort).
         TextColumn::macro('advancedSearchable', function (
             array|string $in = [],
             array|string $include = [],
@@ -42,6 +59,7 @@ class SearchableServiceProvider extends PackageServiceProvider
                         include: $include,
                         except: $except,
                         externalLimit: $externalLimit,
+                        orderByRelevance: false,
                     );
                 }
             );

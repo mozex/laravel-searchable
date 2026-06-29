@@ -1,6 +1,6 @@
 ---
 name: searchable-development
-description: Add multi-column database search to Eloquent models using mozex/laravel-searchable. Activate when the user mentions Searchable trait, searchableColumns, advancedSearchable, SearchableGlobalSearchProvider, applySearch, multi-column search, relation search, morph search, cross-database search, or uses ->search() on Eloquent queries. Also activate when adding search to a model, configuring Filament table search, or setting up Filament global search with this package. Covers column notation (direct, relation, morph, external), column filtering (in/include/except), Laravel Scout coexistence, and resolving conflicts when another package owns the search method name.
+description: Add multi-column database search to Eloquent models using mozex/laravel-searchable. Activate when the user mentions Searchable trait, searchableColumns, advancedSearchable, SearchableGlobalSearchProvider, applySearch, multi-column search, relation search, morph search, cross-database search, relevance ordering, orderByRelevance, ranking search results, or uses ->search() on Eloquent queries. Also activate when adding search to a model, configuring Filament table search, or setting up Filament global search with this package. Covers column notation (direct, relation, morph, external), column filtering (in/include/except), relevance ordering, Laravel Scout coexistence, and resolving conflicts when another package owns the search method name.
 ---
 
 # Searchable Development
@@ -102,6 +102,52 @@ TextColumn::make('title')->advancedSearchable(externalLimit: 200);
 ```
 
 The parameter is ignored when no external columns are involved.
+
+## Relevance Ordering
+
+Results are ranked by match relevance automatically. The `searchableColumns()` array order is the priority: a match in an earlier column outranks a match found only in a later column, so put your most important column (usually `title` or `name`) first. Within a column, exact matches rank above prefix matches above buried substring matches.
+
+The grading depends on the column type:
+
+- Direct, same-connection relation, and direct-target morph columns get full exact/prefix/substring scoring.
+- HasMany relations are scored by their best-matching child row.
+- Cross-database relations and two-hop morph columns (e.g. `commentable:post.author.name`) get a matched-or-not score, but still respect column priority.
+
+Toggle with `orderByRelevance` (default `true`):
+
+```php
+Post::search('term', orderByRelevance: false)->get();
+
+// Same parameter on applySearch
+$model->applySearch($query, 'term', orderByRelevance: false);
+```
+
+The trait adds one `ORDER BY` key per searchable column, after the `WHERE`. An `orderBy()` added BEFORE `search()` stays the primary sort and relevance becomes the tiebreaker; added AFTER `search()`, relevance leads and your column breaks ties.
+
+`applyRelevanceSort($query, $search, in/include/except, externalLimit)` applies just the ordering (no WHERE) for callers that filter separately.
+
+### Filament tables: ranking is automatic
+
+Filament tables rank by relevance automatically while searching. No per-table code. When the package boots with Filament present, `RelevanceSort::register()` adds a global table query scope (via `Table::configureUsing` + `modifyQueryUsing`) that runs on the outer query before sorting.
+
+It composes instead of replacing:
+
+- Not searching: does nothing, the table's own `defaultSort` runs untouched.
+- Searching: relevance leads, the table's `defaultSort` becomes the tiebreaker.
+- User clicks a sortable column: relevance steps aside, their sort wins.
+
+It applies only to models that use the `Searchable` trait. Note the macro can't rank on its own (Filament runs the search callback inside a nested WHERE, and Eloquent discards any `orderBy` there), which is why ranking rides a query scope instead.
+
+Global opt-out, then wire manually if you want:
+
+```php
+use Mozex\Searchable\Filament\RelevanceSort;
+
+RelevanceSort::$enabled = false;
+
+// reuse the decision logic anywhere ($search + $sortColumn from the table livewire)
+RelevanceSort::apply($query, $search, $sortColumn);
+```
 
 ## Filament Integration
 
@@ -232,7 +278,9 @@ public function searchableColumns(): array
 ```php
 $results = auth()->user()
     ->projects()
+    ->orderByDesc('updated_at')  // primary sort; relevance breaks ties
     ->search($this->search, except: ['user.name', 'user.email'])
-    ->orderByDesc('updated_at')
     ->paginate();
 ```
+
+Put `orderByDesc('updated_at')` before `search()` so the recency sort stays primary. Call it after `search()` instead, and relevance leads with `updated_at` as the tiebreaker.

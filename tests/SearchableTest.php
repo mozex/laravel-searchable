@@ -391,3 +391,103 @@ describe('query integration', function () {
             ->and($results->first()->title)->toBe('Laravel Guide');
     });
 });
+
+describe('relevance ordering', function () {
+    it('ranks earlier columns above later ones', function () {
+        // Lower-priority match is created first (lower id) to prove ordering
+        // is by relevance, not insertion order.
+        $bodyMatch = Post::factory()->create(['title' => 'Unrelated', 'body' => 'Laravel here']);
+        $titleMatch = Post::factory()->create(['title' => 'Laravel', 'body' => 'Unrelated']);
+
+        $results = Post::query()->search('Laravel', in: ['title', 'body'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$titleMatch->id, $bodyMatch->id]);
+    });
+
+    it('ranks exact above prefix above substring matches within a column', function () {
+        $substring = Post::factory()->create(['title' => 'Best Laravel Ever']);
+        $prefix = Post::factory()->create(['title' => 'Laravel Guide']);
+        $exact = Post::factory()->create(['title' => 'Laravel']);
+
+        $results = Post::query()->search('Laravel', in: ['title'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$exact->id, $prefix->id, $substring->id]);
+    });
+
+    it('ranks a direct column match above a relation column match', function () {
+        $author = Author::factory()->create(['name' => 'Laravel']);
+        $relationMatch = Post::factory()->create(['author_id' => $author->id, 'title' => 'Unrelated']);
+        $titleMatch = Post::factory()->create(['title' => 'Laravel']);
+
+        $results = Post::query()->search('Laravel', in: ['title', 'author.name'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$titleMatch->id, $relationMatch->id]);
+    });
+
+    it('ranks a HasMany relation match by best match quality', function () {
+        $weak = Author::factory()->create(['name' => 'Alice']);
+        Post::factory()->create(['author_id' => $weak->id, 'title' => 'A Laravel Tutorial']);
+
+        $strong = Author::factory()->create(['name' => 'Bob']);
+        Post::factory()->create(['author_id' => $strong->id, 'title' => 'Laravel']);
+
+        $results = Author::query()->search('Laravel', in: ['posts.title'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$strong->id, $weak->id]);
+    });
+
+    it('ranks a direct column match above a morph relation match', function () {
+        $post = Post::factory()->create(['title' => 'Laravel']);
+        $morphMatch = Comment::factory()->create([
+            'body' => 'Unrelated',
+            'commentable_type' => 'post',
+            'commentable_id' => $post->id,
+        ]);
+        $bodyMatch = Comment::factory()->create([
+            'body' => 'Laravel',
+            'commentable_type' => 'post',
+            'commentable_id' => $post->id,
+        ]);
+
+        $results = Comment::query()
+            ->search('Laravel', in: ['body', 'commentable:post.title'])
+            ->get();
+
+        expect($results->pluck('id')->all())->toBe([$bodyMatch->id, $morphMatch->id]);
+    });
+
+    it('ranks an external relation match by column priority', function () {
+        $category = Category::factory()->create(['name' => 'Laravel']);
+        $externalMatch = Post::factory()->create(['category_id' => $category->id, 'title' => 'Unrelated']);
+        $titleMatch = Post::factory()->create(['title' => 'Laravel']);
+
+        $results = Post::query()->search('Laravel', in: ['title', 'category.name'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$titleMatch->id, $externalMatch->id]);
+    });
+
+    it('applies ordering by default and can be disabled', function () {
+        $ordered = Post::query();
+        $ordered->getModel()->applySearch($ordered, 'Laravel', in: ['title']);
+
+        $unordered = Post::query();
+        $unordered->getModel()->applySearch($unordered, 'Laravel', in: ['title'], orderByRelevance: false);
+
+        expect($ordered->getQuery()->orders)->not->toBeNull()
+            ->and($unordered->getQuery()->orders)->toBeNull();
+    });
+
+    it('keeps a user-defined order as the primary sort when applied first', function () {
+        $first = Post::factory()->create(['title' => 'Laravel A']);
+        $second = Post::factory()->create(['title' => 'Laravel B']);
+
+        // User order applied before search => it stays the primary key,
+        // relevance only breaks ties.
+        $results = Post::query()
+            ->orderByDesc('id')
+            ->search('Laravel', in: ['title'])
+            ->get();
+
+        expect($results->pluck('id')->all())->toBe([$second->id, $first->id]);
+    });
+});

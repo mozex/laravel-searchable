@@ -38,9 +38,10 @@ trait Searchable
         string|array $in = [],
         string|array $include = [],
         string|array $except = [],
-        int $externalLimit = 50
+        int $externalLimit = 50,
+        bool $orderByRelevance = true
     ): void {
-        $this->scopeSearch($query, $search, $in, $include, $except, $externalLimit);
+        $this->scopeSearch($query, $search, $in, $include, $except, $externalLimit, $orderByRelevance);
     }
 
     /**
@@ -55,7 +56,8 @@ trait Searchable
         string|array $in = [],
         string|array $include = [],
         string|array $except = [],
-        int $externalLimit = 50
+        int $externalLimit = 50,
+        bool $orderByRelevance = true
     ): void {
         if (empty($search)) {
             return;
@@ -90,6 +92,10 @@ trait Searchable
                 $this->applyDirectSearch($query, $column, $search);
             }
         });
+
+        if ($orderByRelevance) {
+            $this->applyRelevanceOrder($query, $columns, $search, $externalLimit);
+        }
     }
 
     /**
@@ -323,5 +329,234 @@ trait Searchable
                         ->pluck($morphModel->getKeyName())
                 )
         );
+    }
+
+    /**
+     * Apply only the relevance ordering, without any WHERE filtering.
+     *
+     * Useful when something else already filters the query and you just want
+     * the ranking, e.g. a Filament table where Filament builds the search
+     * WHERE and sorting is a separate phase. See the Filament RelevanceSort
+     * helper.
+     *
+     * @param  Builder<static>  $query
+     * @param  string|array<int, string>  $in
+     * @param  string|array<int, string>  $include
+     * @param  string|array<int, string>  $except
+     */
+    public function applyRelevanceSort(
+        Builder $query,
+        ?string $search,
+        string|array $in = [],
+        string|array $include = [],
+        string|array $except = [],
+        int $externalLimit = 50
+    ): void {
+        if (empty($search)) {
+            return;
+        }
+
+        $columns = $this->resolveSearchColumns($in, $include, $except);
+
+        if ($columns->isEmpty()) {
+            return;
+        }
+
+        $this->applyRelevanceOrder($query, $columns, $search, $externalLimit);
+    }
+
+    /**
+     * Order matches by relevance.
+     *
+     * Each searchable column contributes one ORDER BY key, emitted in the
+     * column's declared order. The first column is the primary sort key, the
+     * second breaks ties, and so on - so a match in an earlier column always
+     * outranks a match that only occurs in a later one. Within a single column,
+     * a graded score ranks exact matches above prefix matches above substring
+     * matches.
+     *
+     * @param  Builder<static>  $query
+     * @param  Collection<int, string>  $columns
+     */
+    protected function applyRelevanceOrder(Builder $query, Collection $columns, string $search, int $externalLimit): void
+    {
+        foreach ($columns as $column) {
+            $term = $this->relevanceScoreFor($query, $column, $search, $externalLimit);
+
+            if ($term === null) {
+                continue;
+            }
+
+            [$sql, $bindings] = $term;
+
+            $query->orderByRaw("({$sql}) desc", $bindings);
+        }
+    }
+
+    /**
+     * Build the relevance score expression for a single column.
+     *
+     * @param  Builder<static>  $query
+     * @return array{0: string, 1: array<int, mixed>}|null
+     */
+    protected function relevanceScoreFor(Builder $query, string $column, string $search, int $externalLimit): ?array
+    {
+        if (! $this->isRelationColumn($column)) {
+            return $this->directRelevanceScore($query, $column, $search);
+        }
+
+        if ($this->isMorphColumn($column)) {
+            return $this->isExternalMorph($column)
+                ? $this->externalMorphRelevanceScore($query, $column, $search, $externalLimit)
+                : $this->morphRelevanceScore($query, $column, $search);
+        }
+
+        if ($this->isExternalRelation($query, $column)) {
+            return $this->externalRelationRelevanceScore($query, $column, $search, $externalLimit);
+        }
+
+        return $this->relationRelevanceScore($query, $column, $search);
+    }
+
+    /**
+     * A graded, case-insensitive match score: 3 = exact, 2 = prefix, 1 = substring, 0 = none.
+     *
+     * @param  Builder<*>  $query
+     * @return array{0: string, 1: array<int, string>}
+     */
+    protected function relevanceCase(Builder $query, string $column, string $search): array
+    {
+        $wrapped = 'LOWER('.$query->getQuery()->getGrammar()->wrap($column).')';
+        $lower = mb_strtolower($search);
+
+        $sql = "CASE WHEN {$wrapped} = ? THEN 3 WHEN {$wrapped} LIKE ? THEN 2 WHEN {$wrapped} LIKE ? THEN 1 ELSE 0 END";
+
+        return [$sql, [$lower, $lower.'%', '%'.$lower.'%']];
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    protected function directRelevanceScore(Builder $query, string $column, string $search): array
+    {
+        return $this->relevanceCase($query, $column, $search);
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    protected function relationRelevanceScore(Builder $query, string $column, string $search): array
+    {
+        [$relationName, $columnName] = $this->splitRelationColumn($column);
+
+        $relation = $query->getRelation($relationName);
+        $related = $relation->getRelated();
+
+        [$caseSql, $caseBindings] = $this->relevanceCase($related->newQuery(), $columnName, $search);
+
+        $sub = $relation->getRelationExistenceQuery($related->newQuery(), $query, [])
+            ->selectRaw("COALESCE(MAX({$caseSql}), 0)", $caseBindings);
+
+        return [$sub->toSql(), $sub->getBindings()];
+    }
+
+    /**
+     * Cross-database relations can't be correlated in SQL, so reuse the capped
+     * subquery of matching keys and score a row by whether its foreign key is
+     * among them.
+     *
+     * @param  Builder<static>  $query
+     * @return array{0: string, 1: array<int, mixed>}|null
+     */
+    protected function externalRelationRelevanceScore(Builder $query, string $column, string $search, int $limit): ?array
+    {
+        [$relationName, $columnName] = $this->splitRelationColumn($column);
+
+        /** @var BelongsTo<Model, static> $relation */
+        $relation = $query->getRelation($relationName);
+
+        $ids = $this->whereSearchLike($relation->getRelated()->newQuery(), $columnName, $search)
+            ->take($limit)
+            ->pluck($relation->getRelated()->getKeyName())
+            ->all();
+
+        if ($ids === []) {
+            return null;
+        }
+
+        $foreignKey = $query->getQuery()->getGrammar()->wrap($relation->getForeignKeyName());
+        $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+
+        return ["CASE WHEN {$foreignKey} IN ({$placeholders}) THEN 1 ELSE 0 END", $ids];
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    protected function morphRelevanceScore(Builder $query, string $column, string $search): array
+    {
+        [$relationName, $columnName, $morphModel, $morphType] = $this->parseMorphColumn($column);
+
+        $typeColumn = $query->getQuery()->getGrammar()->wrap("{$relationName}_type");
+        $outerKey = $query->getModel()->qualifyColumn("{$relationName}_id");
+
+        if ($this->isRelationColumn($columnName)) {
+            [$subRelation, $subColumn] = $this->splitRelationColumn($columnName);
+
+            $sub = $morphModel->newQuery()
+                ->selectRaw('1')
+                ->whereColumn($morphModel->getQualifiedKeyName(), $outerKey)
+                ->whereHas(
+                    $subRelation,
+                    fn (Builder $q): Builder => $this->whereSearchLike($q, $subColumn, $search)
+                );
+
+            return [
+                "CASE WHEN {$typeColumn} = ? AND EXISTS ({$sub->toSql()}) THEN 1 ELSE 0 END",
+                [$morphType, ...$sub->getBindings()],
+            ];
+        }
+
+        [$caseSql, $caseBindings] = $this->relevanceCase($morphModel->newQuery(), $columnName, $search);
+
+        $sub = $morphModel->newQuery()
+            ->selectRaw("COALESCE(MAX({$caseSql}), 0)", $caseBindings)
+            ->whereColumn($morphModel->getQualifiedKeyName(), $outerKey);
+
+        return [
+            "CASE WHEN {$typeColumn} = ? THEN ({$sub->toSql()}) ELSE 0 END",
+            [$morphType, ...$sub->getBindings()],
+        ];
+    }
+
+    /**
+     * @param  Builder<static>  $query
+     * @return array{0: string, 1: array<int, mixed>}|null
+     */
+    protected function externalMorphRelevanceScore(Builder $query, string $column, string $search, int $limit): ?array
+    {
+        [$relationName, $columnName, $morphModel, $morphType] = $this->parseMorphColumn($column);
+
+        $ids = $this->whereSearchLike($morphModel->newQuery(), $columnName, $search)
+            ->take($limit)
+            ->pluck($morphModel->getKeyName())
+            ->all();
+
+        if ($ids === []) {
+            return null;
+        }
+
+        $grammar = $query->getQuery()->getGrammar();
+        $typeColumn = $grammar->wrap("{$relationName}_type");
+        $idColumn = $grammar->wrap("{$relationName}_id");
+        $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+
+        return [
+            "CASE WHEN {$typeColumn} = ? AND {$idColumn} IN ({$placeholders}) THEN 1 ELSE 0 END",
+            [$morphType, ...$ids],
+        ];
     }
 }

@@ -21,8 +21,10 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
   - [Cross-Database Relations](#cross-database-relations)
 - [Case Sensitivity](#case-sensitivity)
 - [Column Filtering](#column-filtering)
+- [Relevance Ordering](#relevance-ordering)
 - [Performance](#performance)
 - [Filament Integration](#filament-integration)
+  - [Ranked Table Search](#ranked-table-search)
   - [Global Search](#global-search)
 - [Handling Conflicts](#handling-conflicts)
   - [Laravel Scout](#laravel-scout)
@@ -209,9 +211,46 @@ Post::search('term', include: ['slug'], except: ['body'])->get();
 
 All three parameters accept a string or an array.
 
+## Relevance Ordering
+
+Results come back ranked by how well they match, not by `id`. The order of your `searchableColumns()` array sets the priority: a hit in the first column outranks a hit that only shows up in a later one.
+
+Say a `Course` searches `['title', 'description']`. Search "laravel", and a course with "Laravel" in its title sorts above one that only mentions it in the description, even when the description course was created first. Title is column 0, so it wins. This is the whole point. Before, both matched equally and you had to scroll to find the one you meant.
+
+Within a single column, closer matches rank higher. An exact value beats a prefix, which beats a buried substring. Searching "laravel" against three titles:
+
+- `Laravel` ranks first (exact match)
+- `Laravel Guide` ranks next (starts with the term)
+- `Best Laravel Tips` ranks last (term sits in the middle)
+
+The same grading runs on relation and morph columns. `author.name` is scored right after `title`, `commentable:post.title` in its own array position, and so on down the list. A HasMany relation is scored by its best-matching child, so an author with a post titled exactly "Laravel" sorts above one with "A Laravel Tutorial".
+
+Cross-database relations and two-hop morph columns like `commentable:post.author.name` get a simpler matched-or-not score instead of the exact/prefix/substring grading, because those can't be ranked inside a single SQL statement. Column priority still holds for them.
+
+Ordering is on by default. Turn it off with `orderByRelevance: false`:
+
+```php
+Post::search('laravel', orderByRelevance: false)->get();
+```
+
+The same parameter works on `applySearch()`.
+
+Add your own `orderBy()` before `search()` and yours stays the primary sort, with relevance as the tiebreaker:
+
+```php
+// created_at drives the order, relevance only breaks ties
+Post::query()->orderByDesc('created_at')->search('laravel')->get();
+```
+
+Call `orderBy()` after `search()` and the roles flip: relevance leads, your column breaks ties.
+
+In Filament tables this is automatic while searching. See [Ranked Table Search](#ranked-table-search).
+
 ## Performance
 
 This package compiles to `LIKE '%term%'`. The leading wildcard defeats B-tree indexes, so every row in the searched column gets scanned, and each relation or morph column adds a correlated `EXISTS` subquery on top. On small-to-mid tables this is fine; into the millions of rows, or once a search hits many relations, switch to Laravel Scout with Meilisearch, Typesense, or Algolia. Indexing the searched columns themselves won't help, but indexing the columns you also filter on (e.g., `tenant_id`, `status`) lets the database prune rows before the `LIKE` runs. On Postgres, a `pg_trgm` GIN index is the one thing that genuinely speeds up `LIKE '%term%'` while staying in SQL.
+
+Relevance ordering adds a scoring expression to the `ORDER BY` for each searchable column, and for relation and morph columns that's another correlated subquery. It only runs over rows that already passed the `WHERE`, so the cost tracks the number of matches, not the table size. If you don't need ranked results, `orderByRelevance: false` skips all of it.
 
 ## Filament Integration
 
@@ -233,7 +272,36 @@ TextColumn::make('title')
     ->sortable(),
 ```
 
+### Ranked Table Search
+
+Tables rank by relevance automatically while searching. There's nothing to add to your tables. When the package boots with Filament present, it registers a global table query scope, so any table whose model uses the `Searchable` trait floats the best matches to the top the moment someone types in the search box, using the same column-priority and exact/prefix/substring rules from [Relevance Ordering](#relevance-ordering).
+
+It's deliberately careful about not stepping on your existing sorts:
+
+- **Not searching?** It does nothing. Your table's own `defaultSort`, however complex, runs exactly as before.
+- **Searching?** Relevance leads, and your `defaultSort` becomes the tiebreaker behind it. Your sort still runs; it just settles ties among equally relevant rows.
+- **Clicked a column header to sort?** Relevance gets out of the way completely and the chosen sort wins.
+
+This works because Filament's search and sort are separate phases. The macro can't rank on its own (Filament runs the search callback inside a nested `WHERE`, and Eloquent throws away any `orderBy` added there), so the ranking rides on a query scope that runs before sorting instead.
+
+If you'd rather wire ranking yourself, turn the automatic behavior off once, anywhere in a service provider:
+
+```php
+use Mozex\Searchable\Filament\RelevanceSort;
+
+RelevanceSort::$enabled = false;
+```
+
+Then apply it where you want, for example inside a `modifyQueryUsing` or a custom sort, reusing the same decision logic:
+
+```php
+// $search and $sortColumn come from your table's livewire component
+RelevanceSort::apply($query, $search, $sortColumn);
+```
+
 ### Global Search
+
+Global search ranks results on its own. The provider applies relevance ordering for you, so the most relevant hits land at the top of each resource's results with no extra wiring.
 
 Register the provider on your panel:
 
