@@ -2,6 +2,18 @@
 
 All notable changes to `laravel-searchable` will be documented in this file.
 
+## 1.1.0 - 2026-06-29
+
+### What's Changed
+
+**Relevance ordering for search results.** `search()` now ranks results by how well they match instead of returning them in id order. Earlier columns in `searchableColumns()` outrank later ones, and within a column an exact match beats a prefix beats a buried substring. Works across direct, relation, morph, and cross-database columns. On by default; opt out per query with `orderByRelevance: false`.
+
+**Automatic ranking in Filament tables.** Tables now rank by relevance while searching, with no per-table setup. Your table's own `defaultSort` is untouched when not searching and becomes the tiebreaker when searching; an explicit column sort always wins. Disable globally with `RelevanceSort::$enabled = false`.
+
+Heads up: `search()` now adds an `ORDER BY` by default, so result order changes from earlier versions. Pass `orderByRelevance: false` to keep the old behavior.
+
+**Full Changelog**: https://github.com/mozex/laravel-searchable/compare/1.0.3...1.1.0
+
 ## 1.0.3 - 2026-06-23
 
 ### What's Changed
