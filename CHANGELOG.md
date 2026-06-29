@@ -2,6 +2,14 @@
 
 All notable changes to `laravel-searchable` will be documented in this file.
 
+## 1.1.1 - 2026-06-29
+
+### What's Changed
+
+**Fixed a query error on `MorphTo` relations referenced in dot notation.** A searchable column like `'commentable.title'`, where `commentable` is a `MorphTo`, can't resolve to a single related model, so the relevance ordering added in 1.1.0 built a subquery against the wrong table and threw a SQL error (`Unknown column ...`). These untyped morph columns are now skipped during both search and ordering instead of failing. To search a specific morph target, use the typed syntax (`'commentable:post.title'`).
+
+**Full Changelog**: https://github.com/mozex/laravel-searchable/compare/1.1.0...1.1.1
+
 ## 1.1.0 - 2026-06-29
 
 ### What's Changed
