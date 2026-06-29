@@ -165,7 +165,7 @@ class Comment extends Model
 
 Nested relations inside morph targets work too. `commentable:post.author.name` first resolves the morph to a Post, then follows the `author` relation on Post to search the author's name.
 
-Prefer the typed colon syntax for morphs. A `MorphTo` written in plain dot notation (`commentable.title`, no type) still searches through `whereHas`, but it can't be relevance-ranked (the package can't resolve a single target model to score), so it's left out of the ordering. Name the type with the colon syntax to get ranking too.
+You need the morph type. A `MorphTo` written in plain dot notation (`commentable.title`, no type) can't resolve to a single model, so the package skips that column rather than guessing. Always name the type with the colon syntax.
 
 ### Cross-Database Relations
 
