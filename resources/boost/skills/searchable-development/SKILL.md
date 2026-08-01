@@ -1,6 +1,6 @@
 ---
 name: searchable-development
-description: Add multi-column database search to Eloquent models using mozex/laravel-searchable. Activate when the user mentions Searchable trait, searchableColumns, advancedSearchable, SearchableGlobalSearchProvider, applySearch, multi-column search, relation search, morph search, cross-database search, relevance ordering, orderByRelevance, ranking search results, or uses ->search() on Eloquent queries. Also activate when adding search to a model, configuring Filament table search, or setting up Filament global search with this package. Covers column notation (direct, relation, morph, external), column filtering (in/include/except), relevance ordering, Laravel Scout coexistence, and resolving conflicts when another package owns the search method name.
+description: Add multi-column database search to Eloquent models using mozex/laravel-searchable. Activate when the user mentions Searchable trait, searchableColumns, advancedSearchable, SearchableGlobalSearchProvider, applySearch, multi-column search, relation search, nested or multi-hop relation search, morph search, cross-database search, multi-word or multi-term search, quoted phrase search, maxTerms, LIKE wildcard escaping, relevance ordering, orderByRelevance, ranking search results, or uses ->search() on Eloquent queries. Also activate when adding search to a model, configuring Filament table search, or setting up Filament global search with this package. Covers column notation (direct, relation, morph, external), column filtering (in/include/except), multi-word term splitting, relevance ordering, Laravel Scout coexistence, and resolving conflicts when another package owns the search method name.
 ---
 
 # Searchable Development
@@ -49,29 +49,60 @@ Five column types, detected automatically from the string format:
 
 | Type | Format | Example | How it searches |
 |------|--------|---------|-----------------|
-| Direct | `column` | `'title'` | `orWhereLike` on the column |
-| Relation | `relation.column` | `'author.name'` | `orWhereHas` with `whereLike` |
+| Direct | `column` | `'title'` | case-insensitive `LIKE` on the column |
+| Relation | `relation.column` | `'author.name'` | `orWhereHas` with a `LIKE` |
 | Morph | `relation:type.column` | `'commentable:post.title'` | `orWhereHasMorph` |
 | External | `relation.column` (different DB) | `'product.name'` | `orWhereIn` with subquery (default cap of 50 IDs) |
 | External morph | `relation:type.column` (different DB) | `'commentable:product.name'` | type check + `whereIn` subquery (same cap) |
 
-External relations are auto-detected when the related model's `$connection` differs from the current model's. Only `BelongsTo` relations are detected as external (HasMany on a different connection falls through to regular relation search).
+External relations are auto-detected when the related model's `$connection` differs from the current model's. Only single-hop `BelongsTo` relations are detected as external (HasMany on a different connection falls through to regular relation search).
 
-Nested morph relations work: `'commentable:post.author.name'` resolves the morph to Post, then follows the `author` relation.
+Relation paths go as deep as you need. The LAST segment is the column, everything before it is the relation chain, so `'author.company.name'` becomes `whereHas('author.company', ...)`. Two-segment columns behave exactly as before.
+
+Nested morph relations work too: `'commentable:post.author.name'` resolves the morph to Post, then follows the `author` relation.
 
 A `MorphTo` MUST use the typed colon syntax. Writing it as plain dot notation (`'commentable.title'`) can't resolve to a single model, so the package skips that column instead of erroring. Use `'commentable:post.title'`.
 
+## Multi-Word Search
+
+A search string is split on whitespace into terms that must ALL match. Each term is its own `OR` group across the searchable columns, and the groups are joined with `AND`, so every term has to appear somewhere but each may appear in a different column.
+
+```php
+Author::search('Doe Jane')->get();          // finds "Jane Doe"; order doesn't matter
+Author::search('Jane acme.com')->get();     // "Jane" in name, "acme.com" in email
+```
+
+Double quotes keep a run of words together as one term:
+
+```php
+Author::search('"Jane Doe"')->get();          // contiguous phrase only
+Author::search('"Jane Doe" senior')->get();   // phrase plus a loose term
+```
+
+`maxTerms` (default 10) caps the split so a pasted paragraph can't build an unbounded query. Set it to `1` for the pre-1.2 behavior of matching the whole string as one literal phrase:
+
+```php
+Post::search('term', maxTerms: 25)->get();
+Post::search('exact phrase please', maxTerms: 1)->get();
+```
+
+A one-word search short-circuits the split and generates the same query it did before this existed. A whitespace-only search is treated as no search, same as `null` or `''`.
+
+## Wildcard Escaping
+
+`%` and `_` in the search term are escaped before they reach SQL, against an `ESCAPE '!'` clause. So `search('_')` returns rows containing a literal underscore rather than every row in the table, and `search('100%')` finds "100% Cotton" rather than everything beginning with `100`. The escaping covers the relevance ranking as well as the filter. Nothing to configure.
+
 ## Case Sensitivity
 
-All search types use Laravel's `whereLike`, so matching is case-insensitive by default. `Post::search('LARAVEL')` matches `laravel`, `Laravel`, and `LARAVEL` with no extra flag.
+Matching is case-insensitive by default. `Post::search('LARAVEL')` matches `laravel`, `Laravel`, and `LARAVEL` with no extra flag.
 
-The actual behavior is database-driven:
+The package lowercases both operands instead of relying on the column's collation, so this holds even on binary-collated columns. That's what makes it work on the JSON columns translatable models use, which MySQL compares case-sensitively under a plain `LIKE`.
 
-- **MySQL / MariaDB**: case-insensitive on `_ci` collations (default), case-sensitive on `_bin` / `_cs`.
-- **PostgreSQL**: always case-insensitive (`whereLike` compiles to `ILIKE`).
-- **SQLite**: case-insensitive for ASCII only.
+- **MySQL / MariaDB**: case-insensitive on every collation, `_bin` and `_cs` included.
+- **PostgreSQL**: case-insensitive.
+- **SQLite**: case-insensitive for ASCII only. SQLite's `LOWER()` leaves non-ASCII alone.
 
-The package exposes no flag to flip this. To force case-sensitive matching, change the column's collation at the database level.
+The package exposes no flag to flip this. For a case-sensitive match, add that constraint separately.
 
 ## Column Filtering Parameters
 
@@ -111,9 +142,13 @@ Results are ranked by match relevance automatically. The `searchableColumns()` a
 
 The grading depends on the column type:
 
-- Direct, same-connection relation, and direct-target morph columns get full exact/prefix/substring scoring.
+- Direct, single-hop same-connection relation, and direct-target morph columns get full exact/prefix/substring scoring.
 - HasMany relations are scored by their best-matching child row.
-- Cross-database relations and two-hop morph columns (e.g. `commentable:post.author.name`) get a matched-or-not score, but still respect column priority.
+- Cross-database relations, multi-hop relations (`author.company.name`), and two-hop morph columns (`commentable:post.author.name`) get a matched-or-not score, but still respect column priority.
+
+With multiple terms, a column scores each term and sums them, and a match on the whole phrase outranks any combination of individual term matches. Searching "laravel guide", a title of `Laravel Guide` ranks above `Guide to Laravel`. The matched-or-not column types score `1` only when that column contains every term.
+
+The `ORDER BY` cost does not grow with the term count: each column still contributes one scoring expression and at most one subquery, however many words were typed. Only the `WHERE` grows.
 
 Toggle with `orderByRelevance` (default `true`):
 
@@ -165,6 +200,9 @@ TextColumn::make('title')->advancedSearchable(except: ['author.name']),
 
 // Custom scope method name
 TextColumn::make('title')->advancedSearchable(method: 'databaseSearch'),
+
+// Term cap and external cap
+TextColumn::make('title')->advancedSearchable(externalLimit: 200, maxTerms: 5),
 ```
 
 ### Global Search Provider

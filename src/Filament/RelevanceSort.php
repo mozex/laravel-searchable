@@ -69,7 +69,8 @@ class RelevanceSort
         string|array $in = [],
         string|array $include = [],
         string|array $except = [],
-        int $externalLimit = 50
+        int $externalLimit = 50,
+        int $maxTerms = 10
     ): void {
         if (filled($sortColumn)) {
             return;
@@ -92,6 +93,7 @@ class RelevanceSort
             include: $include,
             except: $except,
             externalLimit: $externalLimit,
+            maxTerms: $maxTerms,
         );
     }
 }

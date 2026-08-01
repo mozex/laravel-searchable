@@ -49,10 +49,11 @@ class SearchableServiceProvider extends PackageServiceProvider
             array|string $include = [],
             array|string $except = [],
             int $externalLimit = 50,
-            string $method = 'search'
+            string $method = 'search',
+            int $maxTerms = 10
         ) {
             $this->searchable( // @phpstan-ignore method.notFound
-                query: function (Builder $query, string $search) use ($in, $include, $except, $externalLimit, $method): void {
+                query: function (Builder $query, string $search) use ($in, $include, $except, $externalLimit, $method, $maxTerms): void {
                     $query->{$method}(
                         search: $search,
                         in: $in,
@@ -60,6 +61,7 @@ class SearchableServiceProvider extends PackageServiceProvider
                         except: $except,
                         externalLimit: $externalLimit,
                         orderByRelevance: false,
+                        maxTerms: $maxTerms,
                     );
                 }
             );

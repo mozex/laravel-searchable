@@ -524,3 +524,291 @@ describe('relevance ordering', function () {
         expect($results->pluck('id')->all())->toBe([$second->id, $first->id]);
     });
 });
+
+describe('LIKE wildcard escaping', function () {
+    it('treats an underscore in the term as a literal character', function () {
+        Author::factory()->create(['name' => 'Alice']);
+        Author::factory()->create(['name' => 'Bob']);
+        $literal = Author::factory()->create(['name' => 'snake_case']);
+
+        // A bare `_` is a single-character LIKE wildcard. Unescaped it matched
+        // every row, which is both wrong and a free full scan for anyone with
+        // access to a public search box.
+        $results = Author::query()->search('_', in: ['name'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($literal->id);
+    });
+
+    it('treats a percent sign in the term as a literal character', function () {
+        $literal = Author::factory()->create(['name' => '100% Cotton']);
+        Author::factory()->create(['name' => '1000 Threads']);
+
+        $results = Author::query()->search('100%', in: ['name'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($literal->id);
+    });
+
+    it('treats the escape character itself as a literal character', function () {
+        $literal = Author::factory()->create(['name' => 'Wow! Amazing']);
+        Author::factory()->create(['name' => 'Nothing here']);
+
+        $results = Author::query()->search('Wow!', in: ['name'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($literal->id);
+    });
+
+    it('keeps the escape character out of the exact-match comparison', function () {
+        // The `= ?` arm binds the raw term while the LIKE arms bind the escaped
+        // one. Leaking the escaping into the equality would compare against
+        // `wow!!`, so an exact row would score as a mere substring.
+        $substring = Author::factory()->create(['name' => 'a Wow! moment']);
+        $exact = Author::factory()->create(['name' => 'Wow!']);
+
+        $results = Author::query()->search('Wow!', in: ['name'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$exact->id, $substring->id]);
+    });
+
+    it('escapes wildcards in the relevance ordering as well as the filter', function () {
+        // A term escaped in the WHERE but not in the ORDER BY would match rows
+        // that then all score zero, silently losing the ranking.
+        $substring = Author::factory()->create(['name' => 'a 50% share']);
+        $exact = Author::factory()->create(['name' => '50%']);
+
+        $results = Author::query()->search('50%', in: ['name'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$exact->id, $substring->id]);
+    });
+});
+
+describe('nested relation search', function () {
+    it('searches through a multi-hop relation path', function () {
+        $author = Author::factory()->create(['name' => 'Jane']);
+        $needle = Post::factory()->create(['author_id' => $author->id, 'title' => 'Needle']);
+        $sibling = Post::factory()->create(['author_id' => $author->id, 'title' => 'Haystack']);
+
+        $other = Author::factory()->create(['name' => 'Bob']);
+        Post::factory()->create(['author_id' => $other->id, 'title' => 'Unrelated']);
+
+        // Post -> author -> posts -> title: posts whose author also wrote "Needle".
+        $results = Post::query()->search('Needle', in: ['author.posts.title'])->get();
+
+        expect($results->pluck('id')->sort()->values()->all())
+            ->toBe([$needle->id, $sibling->id]);
+    });
+
+    it('ranks a nested relation column below an earlier column', function () {
+        $jane = Author::factory()->create(['name' => 'Jane']);
+        $bob = Author::factory()->create(['name' => 'Bob']);
+
+        // Created first (lowest id) to prove the ordering is by relevance:
+        // it matches only through author -> posts -> title.
+        $nestedMatch = Post::factory()->create(['author_id' => $jane->id, 'title' => 'Unrelated']);
+        $janeTitle = Post::factory()->create(['author_id' => $jane->id, 'title' => 'Laravel']);
+        $bobTitle = Post::factory()->create(['author_id' => $bob->id, 'title' => 'Laravel']);
+
+        $results = Post::query()->search('Laravel', in: ['title', 'author.posts.title'])->get();
+
+        // The title matches lead; the nested-only match sinks to the bottom.
+        expect($results->pluck('id')->all())
+            ->toBe([$janeTitle->id, $bobTitle->id, $nestedMatch->id]);
+    });
+});
+
+describe('multi-term search', function () {
+    it('matches terms in any order', function () {
+        Author::factory()->create(['name' => 'Jane Doe']);
+
+        expect(Author::query()->search('Doe Jane', in: ['name'])->get())->toHaveCount(1);
+    });
+
+    it('matches terms spread across different columns', function () {
+        Author::factory()->create(['name' => 'Jane Doe', 'email' => 'jane@example.com']);
+        Author::factory()->create(['name' => 'Jane Roe', 'email' => 'roe@example.com']);
+
+        // "Jane" matches the name, "roe@example.com" the email - neither column
+        // contains both terms.
+        $results = Author::query()->search('Jane roe@example.com', in: ['name', 'email'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->email)->toBe('roe@example.com');
+    });
+
+    it('requires every term to match somewhere', function () {
+        Author::factory()->create(['name' => 'Jane Doe', 'email' => 'jane@example.com']);
+
+        expect(Author::query()->search('Jane Nonexistent', in: ['name', 'email'])->get())->toBeEmpty();
+    });
+
+    it('keeps a double-quoted phrase as a single term', function () {
+        $contiguous = Author::factory()->create(['name' => 'Jane Doe']);
+        Author::factory()->create(['name' => 'Doe, Jane']);
+
+        $results = Author::query()->search('"Jane Doe"', in: ['name'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($contiguous->id);
+    });
+
+    it('mixes a quoted phrase with loose terms', function () {
+        $match = Author::factory()->create(['name' => 'Jane Doe', 'email' => 'senior.a@example.com']);
+        Author::factory()->create(['name' => 'Doe, Jane', 'email' => 'senior.b@example.com']);
+
+        $results = Author::query()->search('"Jane Doe" senior', in: ['name', 'email'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($match->id);
+    });
+
+    it('does not return the whole table for a quote-only search', function () {
+        Author::factory()->create(['name' => 'Jane']);
+        Author::factory()->create(['name' => 'Bob']);
+
+        // Stripping the quotes leaves no terms. Falling back to the literal
+        // string keeps the WHERE in place instead of matching everything.
+        expect(Author::query()->search('"', in: ['name'])->get())->toBeEmpty()
+            ->and(Author::query()->search('""', in: ['name'])->get())->toBeEmpty();
+    });
+
+    it('searches for a literal zero', function () {
+        $zero = Author::factory()->create(['name' => '0']);
+        Author::factory()->create(['name' => 'Bob']);
+
+        // `'0'` is falsy, so an empty() guard would have skipped the search.
+        $results = Author::query()->search('0', in: ['name'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($zero->id);
+    });
+
+    it('drops a stray unbalanced quote rather than searching for it', function () {
+        Author::factory()->create(['name' => 'Jane Doe']);
+
+        expect(Author::query()->search('Jane "Doe', in: ['name'])->get())->toHaveCount(1);
+    });
+
+    it('falls back to phrase matching when maxTerms is 1', function () {
+        Author::factory()->create(['name' => 'Jane Doe']);
+
+        $query = Author::query();
+        $query->getModel()->applySearch($query, 'Doe Jane', in: ['name'], maxTerms: 1);
+
+        expect($query->get())->toBeEmpty();
+    });
+
+    it('caps the number of terms it will split into', function () {
+        Author::factory()->create(['name' => 'one two three']);
+
+        // Only the first two terms survive the cap, so the unmatchable third is
+        // dropped rather than expanding the query further.
+        $query = Author::query();
+        $query->getModel()->applySearch($query, 'one two nonexistent', in: ['name'], maxTerms: 2);
+
+        expect($query->get())->toHaveCount(1);
+    });
+
+    it('ignores a whitespace-only search', function () {
+        Author::factory()->create(['name' => 'Jane']);
+        Author::factory()->create(['name' => 'Bob']);
+
+        expect(Author::query()->search('   ', in: ['name'])->get())->toHaveCount(2);
+    });
+
+    it('collapses repeated whitespace between terms', function () {
+        Author::factory()->create(['name' => 'Jane Doe']);
+
+        expect(Author::query()->search("Jane \n\t  Doe", in: ['name'])->get())->toHaveCount(1);
+    });
+
+    it('applies every term to a relation column', function () {
+        $author = Author::factory()->create(['name' => 'Jane Doe']);
+        $match = Post::factory()->create(['author_id' => $author->id]);
+
+        $partial = Author::factory()->create(['name' => 'Jane Roe']);
+        Post::factory()->create(['author_id' => $partial->id]);
+
+        $results = Post::query()->search('Jane Doe', in: ['author.name'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($match->id);
+    });
+
+    it('applies every term to an external relation column', function () {
+        $category = Category::factory()->create(['name' => 'Web Development']);
+        $match = Post::factory()->create(['category_id' => $category->id]);
+
+        $partial = Category::factory()->create(['name' => 'Web Design']);
+        Post::factory()->create(['category_id' => $partial->id]);
+
+        $results = Post::query()->search('Web Development', in: ['category.name'])->get();
+
+        expect($results)->toHaveCount(1)
+            ->and($results->first()->id)->toBe($match->id);
+    });
+});
+
+describe('multi-term relevance ordering', function () {
+    it('ranks a contiguous phrase above scattered term matches', function () {
+        // Scattered match is created first (lower id) to prove the ordering.
+        $scattered = Post::factory()->create(['title' => 'Guide to Laravel']);
+        $phrase = Post::factory()->create(['title' => 'Laravel Guide']);
+
+        $results = Post::query()->search('Laravel Guide', in: ['title'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$phrase->id, $scattered->id]);
+    });
+
+    it('ranks multi-term matches inside a relation column', function () {
+        $scatteredAuthor = Author::factory()->create(['name' => 'Doe, Jane']);
+        $scattered = Post::factory()->create(['author_id' => $scatteredAuthor->id]);
+
+        $phraseAuthor = Author::factory()->create(['name' => 'Jane Doe']);
+        $phrase = Post::factory()->create(['author_id' => $phraseAuthor->id]);
+
+        $results = Post::query()->search('Jane Doe', in: ['author.name'])->get();
+
+        expect($results->pluck('id')->all())->toBe([$phrase->id, $scattered->id]);
+    });
+
+    it('ranks multi-term matches inside a morph column', function () {
+        $scatteredPost = Post::factory()->create(['title' => 'Guide to Laravel']);
+        $scattered = Comment::factory()->create([
+            'body' => 'Unrelated',
+            'commentable_type' => 'post',
+            'commentable_id' => $scatteredPost->id,
+        ]);
+
+        $phrasePost = Post::factory()->create(['title' => 'Laravel Guide']);
+        $phrase = Comment::factory()->create([
+            'body' => 'Unrelated',
+            'commentable_type' => 'post',
+            'commentable_id' => $phrasePost->id,
+        ]);
+
+        $results = Comment::query()
+            ->search('Laravel Guide', in: ['commentable:post.title'])
+            ->get();
+
+        expect($results->pluck('id')->all())->toBe([$phrase->id, $scattered->id]);
+    });
+});
+
+describe('external query efficiency', function () {
+    it('queries the external connection once per term', function () {
+        $category = Category::factory()->create(['name' => 'Laravel']);
+        Post::factory()->create(['category_id' => $category->id]);
+
+        DB::connection('external')->flushQueryLog();
+        DB::connection('external')->enableQueryLog();
+
+        Post::query()->search('Laravel', in: ['category.name'])->get();
+
+        // The keys are fetched once and shared by the WHERE and the ORDER BY.
+        expect(DB::connection('external')->getQueryLog())->toHaveCount(1);
+
+        DB::connection('external')->disableQueryLog();
+    });
+});

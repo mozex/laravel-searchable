@@ -19,7 +19,9 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
   - [Relation Columns](#relation-columns)
   - [Morph Relations](#morph-relations)
   - [Cross-Database Relations](#cross-database-relations)
+- [Multi-Word Search](#multi-word-search)
 - [Case Sensitivity](#case-sensitivity)
+- [Wildcards in Search Terms](#wildcards-in-search-terms)
 - [Column Filtering](#column-filtering)
 - [Relevance Ordering](#relevance-ordering)
 - [Performance](#performance)
@@ -129,6 +131,21 @@ public function searchableColumns(): array
 }
 ```
 
+The path can be as deep as you need. The last segment is the column, everything before it is the relation chain:
+
+```php
+public function searchableColumns(): array
+{
+    return [
+        'title',
+        'author.company.name',           // Post -> Author -> Company
+        'comments.author.team.name',     // three hops, still fine
+    ];
+}
+```
+
+Two-hop and deeper paths get a matched-or-not relevance score rather than the exact/prefix/substring grading. See [Relevance Ordering](#relevance-ordering).
+
 ### Morph Relations
 
 For polymorphic relations, use `relation:morphType.column` notation. The morph type needs to match your morph map alias:
@@ -181,17 +198,58 @@ Post::search('term', externalLimit: 200)->get();
 
 The same parameter works on `applySearch()` and on the Filament `advancedSearchable()` macro.
 
+## Multi-Word Search
+
+Type two words and both have to match. They don't need to be in the same column, and they don't need to be in that order.
+
+```php
+// Finds the author named "Jane Doe"
+Author::search('Doe Jane')->get();
+
+// "Jane" matches the name, "acme.com" matches the email
+Author::search('Jane jane@acme.com')->get();
+```
+
+Each word becomes its own `OR` group across your searchable columns, and the groups are joined with `AND`. So every word has to turn up somewhere, but each one is free to turn up in a different place.
+
+Wrap something in double quotes to keep it together as one term:
+
+```php
+// Matches "Jane Doe", not "Doe, Jane"
+Author::search('"Jane Doe"')->get();
+
+// Quoted phrase plus a loose term
+Author::search('"Jane Doe" senior')->get();
+```
+
+Splitting stops at 10 words. Everything past that is dropped, so a pasted paragraph can't turn into a hundred-predicate query. Raise or lower it with `maxTerms`, or set it to `1` to go back to matching the whole string as one literal phrase:
+
+```php
+Post::search('term', maxTerms: 25)->get();
+Post::search('exact phrase please', maxTerms: 1)->get();
+```
+
+A search that's only whitespace is treated as no search at all, the same as `null` or `''`.
+
+> **Upgrading from 1.1.x:** multi-word searches return more rows than they used to. Before, `search('jane doe')` looked for the literal string `jane doe`; now it looks for `jane` and `doe` separately. Single-word searches are unaffected. Pass `maxTerms: 1` to keep the old behavior.
+
 ## Case Sensitivity
 
 Searches are case-insensitive by default. `Comment::search('LARAVEL')` matches rows containing `laravel`, `Laravel`, or `LARAVEL` without any extra flag or argument.
 
-This comes from Laravel's `whereLike` helper, which the package uses for every search type (direct, relation, morph, and external). Actual behavior follows your database:
+The package lowercases both sides of the comparison rather than leaning on the column's collation, so this holds even on binary-collated columns. That matters for the JSON columns translatable models use, which MySQL compares case-sensitively under a plain `LIKE`. Actual behavior follows your database:
 
-- **MySQL / MariaDB**: case-insensitive on the usual `_ci` collations like `utf8mb4_unicode_ci` and `utf8mb4_0900_ai_ci`. A column on a `_bin` or `_cs` collation matches case-sensitively.
-- **PostgreSQL**: always case-insensitive. `whereLike` compiles to `ILIKE`.
-- **SQLite**: case-insensitive for ASCII only. `Café` and `café` won't match each other under the default `LIKE`.
+- **MySQL / MariaDB**: case-insensitive on every collation, `_bin` and `_cs` included. That's what the lowercasing buys you. A plain `LIKE` against a `utf8mb4_bin` column, which is what translatable models' JSON columns are, would quietly miss `Laravel` when you typed `laravel`.
+- **PostgreSQL**: case-insensitive.
+- **SQLite**: case-insensitive for ASCII only. SQLite's `LOWER()` leaves non-ASCII bytes alone, so `Café` and `CAFÉ` still won't find each other.
 
-The package doesn't expose a flag to flip this. If you need case-sensitive matching on a normally case-insensitive column, change the column's collation at the database level.
+There's no flag to turn this off. If you need a case-sensitive match, build that constraint yourself alongside the search.
+
+## Wildcards in Search Terms
+
+`%` and `_` are LIKE wildcards, and the package escapes both before they reach the query. A user typing `_` into your search box gets rows containing a literal underscore, not every row in the table. Someone searching `100%` gets the products actually called "100% Cotton", not everything starting with `100`.
+
+Nothing to configure. It applies to the filter and to the relevance ranking alike, so a term with a `%` in it still ranks exact matches above substring matches.
 
 ## Column Filtering
 
@@ -227,7 +285,18 @@ Within a single column, closer matches rank higher. An exact value beats a prefi
 
 The same grading runs on relation and morph columns. `author.name` is scored right after `title`, `commentable:post.title` in its own array position, and so on down the list. A HasMany relation is scored by its best-matching child, so an author with a post titled exactly "Laravel" sorts above one with "A Laravel Tutorial".
 
-Cross-database relations and two-hop morph columns like `commentable:post.author.name` get a simpler matched-or-not score instead of the exact/prefix/substring grading, because those can't be ranked inside a single SQL statement. Column priority still holds for them.
+Cross-database relations, multi-hop relations like `author.company.name`, and two-hop morph columns like `commentable:post.author.name` get a simpler matched-or-not score instead of the exact/prefix/substring grading, because those can't be ranked inside a single SQL statement. Column priority still holds for them.
+
+### Ranking multi-word searches
+
+With more than one word, a column scores each word separately and adds them up, then a match on the whole phrase outranks any combination of the individual words. Search "laravel guide" against two titles:
+
+- `Laravel Guide` ranks first. The full phrase is there, contiguous and in order.
+- `Guide to Laravel` ranks second. Both words are present, just scattered.
+
+Both rows come back either way. The one that reads the way you typed it goes on top.
+
+For the matched-or-not column types listed above, the score is `1` only when that column contains every word, and `0` otherwise.
 
 Ordering is on by default. Turn it off with `orderByRelevance: false`:
 
@@ -254,6 +323,16 @@ This package compiles to `LIKE '%term%'`. The leading wildcard defeats B-tree in
 
 Relevance ordering adds a scoring expression to the `ORDER BY` for each searchable column, and for relation and morph columns that's another correlated subquery. It only runs over rows that already passed the `WHERE`, so the cost tracks the number of matches, not the table size. If you don't need ranked results, `orderByRelevance: false` skips all of it.
 
+### What multi-word search costs
+
+A one-word search generates the same query it always did: one `OR` group, one `EXISTS` per relation column, one scoring subquery per column in the `ORDER BY`. Nothing about it got slower.
+
+Each extra word adds another `OR` group to the `WHERE`, so a three-word search does roughly three times the filtering work of a one-word search. There's no way around that; requiring all three words means testing all three. The `ORDER BY` is the part that doesn't grow. However many words you type, each column still contributes exactly one scoring expression and at most one subquery. The extra words become inline arithmetic on rows that already passed the `WHERE`.
+
+Cross-database columns run one query on the other connection per word. On a direct `->search()` those results are shared between the filter and the ranking, so a one-word search makes a single round trip where it used to make two. Filament tables are the exception: they build the filter and the ranking in separate passes, so each pass does its own lookup, exactly as before.
+
+The `maxTerms` cap is the backstop. It stops a pasted paragraph in a public search box from generating an unbounded query.
+
 ## Filament Integration
 
 When Filament is installed, the package registers an `advancedSearchable()` macro on `TextColumn`. Add it to one column in your table, and it'll search across all your model's configured searchable columns:
@@ -266,7 +345,7 @@ TextColumn::make('title')
     ->sortable(),
 ```
 
-You can pass the same `in`, `include`, `except` parameters:
+You can pass the same `in`, `include`, `except`, `externalLimit`, and `maxTerms` parameters:
 
 ```php
 TextColumn::make('title')
