@@ -2,6 +2,24 @@
 
 All notable changes to `laravel-searchable` will be documented in this file.
 
+## 1.2.1 - 2026-08-01
+
+### What's Changed
+
+**Multi-word search.** A search string is now split on whitespace into terms that all have to match, and each term is free to match a different column. `search('Doe Jane')` finds "Jane Doe", and `search('Jane jane@acme.com')` matches when the name supplies one term and the email supplies the other. Wrap words in double quotes to keep them together as a single term. Splitting stops at 10 terms, adjustable with `maxTerms`.
+
+**Relation columns at any depth.** `'author.company.name'` and longer paths now resolve through `whereHas`. Anything past two segments previously built a subquery against a table that was not in scope and failed with an "Unknown column" error.
+
+**LIKE wildcards in the search term are escaped.** `%` and `_` are now matched literally instead of acting as wildcards. Searching for `_` returned every row in the table before this, which was both wrong and an easy way for a public search box to force a full scan. The escaping covers the relevance ranking as well as the filter.
+
+**Fewer queries on cross-database columns.** Matching keys from the other connection are fetched once and shared by the filter and the ranking, so a direct `search()` makes one round trip per term where it previously made two.
+
+On cost: a one-word search generates the same query it did in 1.1.x, and the `ORDER BY` stays at one scoring expression per column however many words are typed. Only the `WHERE` grows with the word count.
+
+Heads up: multi-word searches return more rows than they did in 1.1.x. `search('jane doe')` used to look for the literal string `jane doe` and now looks for `jane` and `doe` separately. Single-word searches are unaffected. Pass `maxTerms: 1` to keep the old behavior.
+
+**Full Changelog**: https://github.com/mozex/laravel-searchable/compare/1.1.1...1.2.1
+
 ## 1.1.1 - 2026-06-29
 
 ### What's Changed
