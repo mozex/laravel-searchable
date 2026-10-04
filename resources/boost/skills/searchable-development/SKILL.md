@@ -79,7 +79,7 @@ Author::search('"Jane Doe"')->get();          // contiguous phrase only
 Author::search('"Jane Doe" senior')->get();   // phrase plus a loose term
 ```
 
-`maxTerms` (default 10) caps the split so a pasted paragraph can't build an unbounded query. Set it to `1` for the pre-1.2 behavior of matching the whole string as one literal phrase:
+`maxTerms` caps the split so a pasted paragraph can't build an unbounded query. The default is 10, or `max_terms` in `config/searchable.php` (published by `php artisan searchable:install`). Set it to `1` for the pre-1.2 behavior of matching the whole string as one literal phrase:
 
 ```php
 Post::search('term', maxTerms: 25)->get();
@@ -124,7 +124,7 @@ Post::search('term', in: 'title')->get();
 
 ### Adjusting the Cross-Database Cap
 
-External relation and external morph columns run a subquery on the other connection and feed matching IDs into a `whereIn`. The subquery caps results at 50 by default to keep the `IN (...)` clause sane. Override per-query with `externalLimit`:
+External relation and external morph columns run a subquery on the other connection and feed matching IDs into a `whereIn`. The subquery caps results at 50 by default (`external_limit` in `config/searchable.php`) to keep the `IN (...)` clause sane. Override per-query with `externalLimit`:
 
 ```php
 Post::search('term', externalLimit: 200)->get();
@@ -175,7 +175,7 @@ It composes instead of replacing:
 
 It applies only to models that use the `Searchable` trait. Note the macro can't rank on its own (Filament runs the search callback inside a nested WHERE, and Eloquent discards any `orderBy` there), which is why ranking rides a query scope instead.
 
-Global opt-out, then wire manually if you want:
+Global opt-out: set `filament.relevance_sort` to `false` in `config/searchable.php`, or switch it off in code and wire it manually:
 
 ```php
 use Mozex\Searchable\Filament\RelevanceSort;

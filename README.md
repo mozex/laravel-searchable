@@ -28,6 +28,7 @@ Add a `Searchable` trait to any Eloquent model and search across multiple column
 - [Filament Integration](#filament-integration)
   - [Ranked Table Search](#ranked-table-search)
   - [Global Search](#global-search)
+- [Configuration](#configuration)
 - [Handling Conflicts](#handling-conflicts)
   - [Laravel Scout](#laravel-scout)
   - [Existing `search` Methods](#existing-search-methods)
@@ -48,7 +49,13 @@ Business sponsors get logo placement in package READMEs. [**See sponsorship tier
 composer require mozex/laravel-searchable
 ```
 
-That's it. No config files to publish, no migrations to run.
+There are no migrations to run. To change the package's defaults, run the install command. It publishes `config/searchable.php`:
+
+```bash
+php artisan searchable:install
+```
+
+[Configuration](#configuration) covers what you can change there.
 
 ## Basic Usage
 
@@ -196,7 +203,7 @@ The cap keeps the resulting `IN (...)` clause from getting unmanageably large wh
 Post::search('term', externalLimit: 200)->get();
 ```
 
-The same parameter works on `applySearch()` and on the Filament `advancedSearchable()` macro.
+The same parameter works on `applySearch()` and on the Filament `advancedSearchable()` macro. To change the default for every search, set `external_limit` in the [config](#configuration).
 
 ## Multi-Word Search
 
@@ -228,6 +235,8 @@ Splitting stops at 10 words. Everything past that is dropped, so a pasted paragr
 Post::search('term', maxTerms: 25)->get();
 Post::search('exact phrase please', maxTerms: 1)->get();
 ```
+
+To change the default for every search, set `max_terms` in the [config](#configuration).
 
 A search that's only whitespace is treated as no search at all, the same as `null` or `''`.
 
@@ -365,7 +374,7 @@ It's deliberately careful about not stepping on your existing sorts:
 
 This works because Filament's search and sort are separate phases. The macro can't rank on its own (Filament runs the search callback inside a nested `WHERE`, and Eloquent throws away any `orderBy` added there), so the ranking rides on a query scope that runs before sorting instead.
 
-If you'd rather wire ranking yourself, turn the automatic behavior off once, anywhere in a service provider:
+To turn the automatic ranking off, set `filament.relevance_sort` to `false` in the [config](#configuration). If you'd rather wire ranking yourself, you can also switch it off in code, anywhere in a service provider:
 
 ```php
 use Mozex\Searchable\Filament\RelevanceSort;
@@ -421,6 +430,28 @@ class PostResource extends Resource
 Each resource you want in global search needs to define `getGloballySearchableAttributes()`. Resources without it are excluded from global search entirely.
 
 Resources whose models don't use the `Searchable` trait fall through to Filament's default global search behavior.
+
+## Configuration
+
+`config/searchable.php` holds the defaults every search uses, whether it runs through `->search()`, `applySearch()`, the `advancedSearchable()` macro, ranked table search, or global search:
+
+```php
+return [
+    'max_terms' => (int) env('SEARCHABLE_MAX_TERMS', 10),
+
+    'external_limit' => (int) env('SEARCHABLE_EXTERNAL_LIMIT', 50),
+
+    'filament' => [
+        'relevance_sort' => (bool) env('SEARCHABLE_FILAMENT_RELEVANCE_SORT', true),
+    ],
+];
+```
+
+- `max_terms`: how many words a [multi-word search](#multi-word-search) is split into. Set it to `1` to match every search as one literal phrase.
+- `external_limit`: how many matching keys a [cross-database column](#cross-database-relations) fetches per term.
+- `filament.relevance_sort`: set it to `false` to turn off [ranked table search](#ranked-table-search) for every table.
+
+A `maxTerms` or `externalLimit` argument on a single call still wins. Setting the default here also keeps Filament consistent: a `maxTerms` passed to `advancedSearchable()` never reaches the automatic ranking, but the configured default reaches both.
 
 ## Handling Conflicts
 
