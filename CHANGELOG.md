@@ -2,6 +2,14 @@
 
 All notable changes to `laravel-searchable` will be documented in this file.
 
+## 1.2.2 - 2026-10-04
+
+### What's Changed
+
+* Improve package setup
+
+**Full Changelog**: https://github.com/mozex/laravel-searchable/compare/1.2.1...1.2.2
+
 ## 1.2.1 - 2026-08-01
 
 ### What's Changed
