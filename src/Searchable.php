@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Config;
 
 trait Searchable
 {
@@ -48,9 +49,9 @@ trait Searchable
         string|array $in = [],
         string|array $include = [],
         string|array $except = [],
-        int $externalLimit = 50,
+        ?int $externalLimit = null,
         bool $orderByRelevance = true,
-        int $maxTerms = 10
+        ?int $maxTerms = null
     ): void {
         $this->scopeSearch($query, $search, $in, $include, $except, $externalLimit, $orderByRelevance, $maxTerms);
     }
@@ -67,10 +68,15 @@ trait Searchable
         string|array $in = [],
         string|array $include = [],
         string|array $except = [],
-        int $externalLimit = 50,
+        ?int $externalLimit = null,
         bool $orderByRelevance = true,
-        int $maxTerms = 10
+        ?int $maxTerms = null
     ): void {
+        // A null limit means the caller didn't pass one: use the app-wide
+        // default from config/searchable.php.
+        $maxTerms ??= (int) Config::get('searchable.max_terms', 10);
+        $externalLimit ??= (int) Config::get('searchable.external_limit', 50);
+
         $terms = $this->parseSearchTerms($search, $maxTerms);
 
         if ($terms === []) {
@@ -587,9 +593,12 @@ trait Searchable
         string|array $in = [],
         string|array $include = [],
         string|array $except = [],
-        int $externalLimit = 50,
-        int $maxTerms = 10
+        ?int $externalLimit = null,
+        ?int $maxTerms = null
     ): void {
+        $maxTerms ??= (int) Config::get('searchable.max_terms', 10);
+        $externalLimit ??= (int) Config::get('searchable.external_limit', 50);
+
         $terms = $this->parseSearchTerms($search, $maxTerms);
 
         if ($terms === []) {

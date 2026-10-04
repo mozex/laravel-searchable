@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Workbench\App\Models\Author;
 use Workbench\App\Models\Category;
@@ -808,6 +809,58 @@ describe('external query efficiency', function () {
 
         // The keys are fetched once and shared by the WHERE and the ORDER BY.
         expect(DB::connection('external')->getQueryLog())->toHaveCount(1);
+
+        DB::connection('external')->disableQueryLog();
+    });
+});
+
+describe('config defaults', function () {
+    it('splits terms up to the configured max_terms', function () {
+        Author::factory()->create(['name' => 'Jane Doe']);
+
+        Config::set('searchable.max_terms', 1);
+
+        // One term means the whole string is a literal phrase, which this name
+        // doesn't contain in that order.
+        expect(Author::query()->search('Doe Jane', in: ['name'])->get())->toBeEmpty();
+    });
+
+    it('lets a maxTerms argument override the configured max_terms', function () {
+        Author::factory()->create(['name' => 'Jane Doe']);
+
+        Config::set('searchable.max_terms', 1);
+
+        expect(Author::query()->search('Doe Jane', in: ['name'], maxTerms: 2)->get())->toHaveCount(1);
+    });
+
+    it('caps external lookups at the configured external_limit', function () {
+        $category = Category::factory()->create(['name' => 'Laravel']);
+        Post::factory()->create(['category_id' => $category->id]);
+
+        Config::set('searchable.external_limit', 7);
+
+        DB::connection('external')->flushQueryLog();
+        DB::connection('external')->enableQueryLog();
+
+        Post::query()->search('Laravel', in: ['category.name'])->get();
+
+        expect(DB::connection('external')->getQueryLog()[0]['query'])->toContain('limit 7');
+
+        DB::connection('external')->disableQueryLog();
+    });
+
+    it('lets an externalLimit argument override the configured external_limit', function () {
+        $category = Category::factory()->create(['name' => 'Laravel']);
+        Post::factory()->create(['category_id' => $category->id]);
+
+        Config::set('searchable.external_limit', 7);
+
+        DB::connection('external')->flushQueryLog();
+        DB::connection('external')->enableQueryLog();
+
+        Post::query()->search('Laravel', in: ['category.name'], externalLimit: 3)->get();
+
+        expect(DB::connection('external')->getQueryLog()[0]['query'])->toContain('limit 3');
 
         DB::connection('external')->disableQueryLog();
     });

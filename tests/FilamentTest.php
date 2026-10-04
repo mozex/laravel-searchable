@@ -4,6 +4,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Mozex\Searchable\Filament\RelevanceSort;
 use Workbench\App\Models\Author;
 use Workbench\App\Models\Post;
@@ -30,6 +31,20 @@ describe('advancedSearchable macro registration', function () {
 });
 
 describe('advancedSearchable callback behavior', function () {
+    it('splits terms up to the configured max_terms', function () {
+        Post::factory()->create(['title' => 'Laravel Guide']);
+
+        Config::set('searchable.max_terms', 1);
+
+        $column = TextColumn::make('title')->advancedSearchable(in: ['title']);
+        $callback = invade($column)->searchQuery;
+
+        $query = Post::query();
+        $callback($query, 'Guide Laravel');
+
+        expect($query->get())->toBeEmpty();
+    });
+
     it('runs the model search scope and filters the query', function () {
         Post::factory()->create(['title' => 'Laravel Guide']);
         Post::factory()->create(['title' => 'Vue Guide']);

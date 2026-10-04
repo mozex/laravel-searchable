@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Livewire\Livewire;
 use Workbench\App\Livewire\PostsTable;
 use Workbench\App\Livewire\TagsTable;
@@ -73,4 +74,16 @@ it('does not touch a table whose model is not searchable', function () {
     $component = Livewire::test(TagsTable::class)->searchTable('Laravel');
 
     expect(tableRecordIds($component))->toBe([$laravel->id]);
+});
+
+it('leaves the table order alone when relevance_sort is off in config', function () {
+    $bodyMatch = Post::factory()->create(['title' => 'Unrelated', 'body' => 'Laravel here']);
+    $titleMatch = Post::factory()->create(['title' => 'Laravel', 'body' => 'Unrelated']);
+
+    Config::set('searchable.filament.relevance_sort', false);
+
+    $component = Livewire::test(PostsTable::class)->searchTable('Laravel');
+
+    // Both rows still match; they just come back in insertion order.
+    expect(tableRecordIds($component))->toBe([$bodyMatch->id, $titleMatch->id]);
 });

@@ -8,6 +8,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Config;
 use Mozex\Searchable\Searchable;
 
 class RelevanceSort
@@ -41,7 +42,7 @@ class RelevanceSort
      */
     public static function scope(Builder $query, HasTable $livewire, bool $isResolvingRecord = false): Builder
     {
-        if (self::$enabled && ! $isResolvingRecord) {
+        if (self::isEnabled() && ! $isResolvingRecord) {
             self::apply(
                 $query,
                 $livewire->getTableSearch(), // @phpstan-ignore method.notFound
@@ -50,6 +51,20 @@ class RelevanceSort
         }
 
         return $query;
+    }
+
+    /**
+     * Both switches have to be on: the static flag (the code-level opt-out)
+     * and the filament.relevance_sort config key, read per query so a runtime
+     * config change takes effect.
+     */
+    protected static function isEnabled(): bool
+    {
+        if (! self::$enabled) {
+            return false;
+        }
+
+        return (bool) Config::get('searchable.filament.relevance_sort', true);
     }
 
     /**
@@ -69,8 +84,8 @@ class RelevanceSort
         string|array $in = [],
         string|array $include = [],
         string|array $except = [],
-        int $externalLimit = 50,
-        int $maxTerms = 10
+        ?int $externalLimit = null,
+        ?int $maxTerms = null
     ): void {
         if (filled($sortColumn)) {
             return;
