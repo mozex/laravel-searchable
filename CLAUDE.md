@@ -54,7 +54,7 @@ LIKE wildcards in the term are escaped by `escapeLikeWildcards` (`%`, `_`, and `
 
 ### Relevance ordering
 
-`scopeSearch`/`applySearch` accept `orderByRelevance` (default `true`). After building the `WHERE`, the trait adds one `ORDER BY` key per searchable column, **in declared array order**. This is lexicographic: column 0 is the primary sort key, column 1 breaks ties, and so on - so a match in an earlier column always outranks a match found only in a later column (the user's "title beats description" requirement), with no weight/overflow math.
+`scopeSearch`/`applySearch` accept `orderByRelevance` (default `true`). After building the `WHERE`, the trait adds one `ORDER BY` key per searchable column, **in declared array order**. This is lexicographic: column 0 is the primary sort key, column 1 breaks ties, and so on - so a match in an earlier column always outranks a match found only in a later column (a title match beats a description match), with no weight/overflow math.
 
 Each `ORDER BY` key is a graded match score, highest first:
 
