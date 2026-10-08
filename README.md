@@ -1,4 +1,4 @@
-![Laravel Searchable](https://raw.githubusercontent.com/mozex/laravel-searchable/main/art/banner.png)
+[![Laravel Searchable](https://raw.githubusercontent.com/mozex/laravel-searchable/main/art/banner.png)](https://mozex.dev/docs/laravel-searchable)
 
 # Laravel Searchable
 
