@@ -1,3 +1,5 @@
+![Laravel Searchable](https://raw.githubusercontent.com/mozex/laravel-searchable/main/art/banner.png)
+
 # Laravel Searchable
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/mozex/laravel-searchable.svg?style=flat-square)](https://packagist.org/packages/mozex/laravel-searchable)
