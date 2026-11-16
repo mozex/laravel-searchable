@@ -2,6 +2,16 @@
 
 All notable changes to `laravel-searchable` will be documented in this file.
 
+## 1.4.0 - 2026-11-16
+
+### What's Changed
+
+* Stop loading Filament's table classes on requests that don't build a table. In a fresh Laravel app with a Filament panel, the package's boot loaded 85 files on every request; it now loads one.
+
+`advancedSearchable()` is now registered the first time a table column is built, not at boot. `TextColumn::make('name')->advancedSearchable()` works as before. Code that checks `TextColumn::hasMacro('advancedSearchable')` before any column exists, or builds columns with `new TextColumn(...)` instead of `make()`, won't find it until a column has been built.
+
+**Full Changelog**: https://github.com/mozex/laravel-searchable/compare/1.3.0...1.4.0
+
 ## 1.3.0 - 2026-10-08
 
 ### What's Changed
