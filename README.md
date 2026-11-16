@@ -356,6 +356,8 @@ TextColumn::make('title')
     ->sortable(),
 ```
 
+The macro is registered the first time a table column is built, so booting your app doesn't load Filament's table classes. Build columns with `make()`, and don't count on `TextColumn::hasMacro('advancedSearchable')` before one exists.
+
 You can pass the same `in`, `include`, `except`, `externalLimit`, and `maxTerms` parameters:
 
 ```php

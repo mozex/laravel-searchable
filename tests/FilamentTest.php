@@ -1,11 +1,15 @@
 <?php
 
+use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Process;
 use Mozex\Searchable\Filament\RelevanceSort;
+use Workbench\App\Filament\Tables\Columns\CustomTextColumn;
+use Workbench\App\Filament\Tables\CustomTable;
 use Workbench\App\Models\Author;
 use Workbench\App\Models\Post;
 use Workbench\App\Models\Tag;
@@ -13,8 +17,47 @@ use Workbench\App\Models\Tag;
 uses(RefreshDatabase::class);
 
 describe('advancedSearchable macro registration', function () {
-    it('registers the macro on TextColumn', function () {
+    // The macro is registered the first time a column is built, so booting
+    // the app doesn't load TextColumn. flushMacros() stands in for a process
+    // that hasn't built a column yet; Filament registers no component macros
+    // of its own, so it removes only ours.
+    afterEach(fn () => TextColumn::flushMacros());
+
+    it('registers the macro the first time a column is built', function () {
+        TextColumn::flushMacros();
+
+        expect(TextColumn::hasMacro('advancedSearchable'))->toBeFalse();
+
+        TextColumn::make('title');
+
         expect(TextColumn::hasMacro('advancedSearchable'))->toBeTrue();
+    });
+
+    it('is in place on a subclass of TextColumn', function () {
+        TextColumn::flushMacros();
+
+        expect(CustomTextColumn::make('title')->advancedSearchable()->isSearchable())->toBeTrue();
+    });
+
+    it('is in place for the app own configureUsing callbacks', function (string $class) {
+        TextColumn::flushMacros();
+
+        $column = $class::configureUsing(
+            fn (Column $column) => $column instanceof TextColumn ? $column->advancedSearchable() : null,
+            during: fn (): TextColumn => TextColumn::make('title'),
+        );
+
+        expect($column->isSearchable())->toBeTrue();
+    })->with([
+        'TextColumn' => TextColumn::class,
+        'Column' => Column::class,
+    ]);
+
+    it('leaves an advancedSearchable macro of the app own alone', function () {
+        TextColumn::flushMacros();
+        TextColumn::macro('advancedSearchable', fn (): string => 'own');
+
+        expect(TextColumn::make('title')->advancedSearchable())->toBe('own');
     });
 
     it('returns the column for chaining', function () {
@@ -214,5 +257,48 @@ describe('Filament automatic relevance sort', function () {
         $table = Table::make(Mockery::mock(HasTable::class)->shouldIgnoreMissing());
 
         expect(invade($table)->queryScopes)->not->toBeEmpty();
+    });
+
+    it('registers the query scope on a subclass of Table', function () {
+        $table = CustomTable::make(Mockery::mock(HasTable::class)->shouldIgnoreMissing());
+
+        expect(invade($table)->queryScopes)->not->toBeEmpty();
+    });
+});
+
+describe('boot', function () {
+    // Each run boots a fresh app in its own process (tests/Fixtures/boot.php):
+    // this process has long since loaded every table class.
+    function bootInFreshProcess(string ...$arguments): array
+    {
+        // Notices PHP prints before Laravel's error handler takes over go to
+        // stderr, so stdout carries only the JSON report.
+        $result = Process::run([PHP_BINARY, '-d', 'display_errors=stderr', __DIR__.'/Fixtures/boot.php', ...$arguments]);
+
+        expect($result->successful())->toBeTrue($result->errorOutput().$result->output());
+
+        return json_decode($result->output(), true, flags: JSON_THROW_ON_ERROR);
+    }
+
+    it('loads no table class while booting', function () {
+        $report = bootInFreshProcess();
+
+        expect($report['booted'])->toBeTrue()
+            ->and($report['loaded'])->toBe([
+                'Table' => false,
+                'Column' => false,
+                'TextColumn' => false,
+                'ComponentManager' => true,
+            ])
+            ->and($report['configured'])->toContain(Table::class, Column::class)
+            ->and($report['macroBeforeColumn'])->toBeFalse()
+            ->and($report['searchableColumn'])->toBeTrue();
+    });
+
+    it('boots in an app without Filament', function () {
+        $report = bootInFreshProcess('--without-filament');
+
+        expect($report['booted'])->toBeTrue()
+            ->and($report['loaded']['ComponentManager'])->toBeFalse();
     });
 });

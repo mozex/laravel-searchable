@@ -1,8 +1,11 @@
 <?php
 
+use Filament\Tables\Table;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Livewire\Livewire;
+use Workbench\App\Filament\Tables\CustomTable;
+use Workbench\App\Livewire\CustomPostsTable;
 use Workbench\App\Livewire\PostsTable;
 use Workbench\App\Livewire\TagsTable;
 use Workbench\App\Models\Post;
@@ -86,4 +89,18 @@ it('leaves the table order alone when relevance_sort is off in config', function
 
     // Both rows still match; they just come back in insertion order.
     expect(tableRecordIds($component))->toBe([$bodyMatch->id, $titleMatch->id]);
+});
+
+it('ranks a table built from an app own Table and TextColumn subclasses', function () {
+    // Both are registered by class name for Table and Column; the manager
+    // applies a parent's configurations to its subclasses.
+    app()->bind(Table::class, CustomTable::class);
+
+    $bodyMatch = Post::factory()->create(['title' => 'Unrelated', 'body' => 'Laravel here']);
+    $titleMatch = Post::factory()->create(['title' => 'Laravel', 'body' => 'Unrelated']);
+
+    $component = Livewire::test(CustomPostsTable::class)->searchTable('Laravel');
+
+    expect($component->instance()->getTable())->toBeInstanceOf(CustomTable::class)
+        ->and(tableRecordIds($component))->toBe([$titleMatch->id, $bodyMatch->id]);
 });

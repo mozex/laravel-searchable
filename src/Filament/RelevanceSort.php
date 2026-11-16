@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mozex\Searchable\Filament;
 
+use Filament\Support\Components\ComponentManager;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -26,10 +27,14 @@ class RelevanceSort
      * own (possibly complex) defaultSort is left untouched when not searching
      * and simply becomes the tiebreaker when searching. An explicit column sort
      * always wins.
+     *
+     * Registered by class name through Filament's component manager, which is
+     * what Table::configureUsing() does internally, so Table isn't loaded until
+     * a request builds a table. It applies to subclasses of Table as well.
      */
     public static function register(): void
     {
-        Table::configureUsing(function (Table $table): void {
+        ComponentManager::resolve()->configureUsing(Table::class, function (Table $table): void {
             $table->modifyQueryUsing(self::scope(...));
         });
     }

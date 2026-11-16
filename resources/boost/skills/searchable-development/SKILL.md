@@ -165,7 +165,7 @@ The trait adds one `ORDER BY` key per searchable column, after the `WHERE`. An `
 
 ### Filament tables: ranking is automatic
 
-Filament tables rank by relevance automatically while searching. No per-table code. When the package boots with Filament present, `RelevanceSort::register()` adds a global table query scope (via `Table::configureUsing` + `modifyQueryUsing`) that runs on the outer query before sorting.
+Filament tables rank by relevance automatically while searching. No per-table code. When the package boots with Filament present, `RelevanceSort::register()` adds a global table query scope (registered for `Table` by class name through Filament's component manager, so it reaches `Table` subclasses too) that runs on the outer query before sorting.
 
 It composes instead of replacing:
 
@@ -190,7 +190,7 @@ RelevanceSort::apply($query, $search, $sortColumn);
 
 ### Table Column Macro
 
-When Filament is installed, `advancedSearchable()` is available on `TextColumn`. Add it to ONE column; it searches all configured `searchableColumns()`:
+When Filament is installed, `advancedSearchable()` is available on `TextColumn` and its subclasses. It's registered the first time a column is built, so call it on a column made with `make()`; don't check `TextColumn::hasMacro()` at boot. Add it to ONE column; it searches all configured `searchableColumns()`:
 
 ```php
 TextColumn::make('title')->advancedSearchable()->sortable(),

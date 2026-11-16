@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Mozex\Searchable;
 
+use Filament\Support\Components\ComponentManager;
+use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Process;
@@ -98,25 +99,53 @@ class SearchableServiceProvider extends PackageServiceProvider
 
     public function packageBooted(): void
     {
+        if (! $this->filamentIsInstalled()) {
+            return;
+        }
+
         $this->registerFilamentMacros();
         $this->registerFilamentRelevanceSort();
     }
 
+    /**
+     * Filament's component manager is the only Filament class this provider
+     * loads at boot, and Filament's own provider loads it on every request
+     * anyway. Asking for Table or TextColumn here would autoload them and the
+     * dozens of traits they use on every request, whether it draws a table or
+     * not. Without filament/tables the configurations below never run.
+     */
+    protected function filamentIsInstalled(): bool
+    {
+        return class_exists(ComponentManager::class);
+    }
+
     protected function registerFilamentRelevanceSort(): void
     {
-        if (! class_exists(Table::class)) {
-            return;
-        }
-
         RelevanceSort::register();
     }
 
+    /**
+     * Registers advancedSearchable the first time a table column is built, by
+     * class name, so TextColumn isn't loaded until a request builds a column.
+     * Keyed on Column rather than TextColumn because the manager runs a
+     * parent's configurations first: the macro is then in place before the
+     * app's own TextColumn configureUsing callbacks run. The hasMacro guard
+     * leaves a same-named macro of the app's own alone, and registers again
+     * after a flushMacros().
+     */
     protected function registerFilamentMacros(): void
     {
-        if (! class_exists(TextColumn::class)) {
-            return;
-        }
+        ComponentManager::resolve()->configureUsing(Column::class, function (): void {
+            if (TextColumn::hasMacro('advancedSearchable')) {
+                return;
+            }
 
+            $this->registerAdvancedSearchableMacro();
+        });
+    }
+
+    protected function registerAdvancedSearchableMacro(): void
+    {
         // Builds the search WHERE only. Filament runs this inside a nested
         // WHERE closure, so relevance ordering can't ride along here (the
         // orderBy would be discarded). Ranking is applied separately and
